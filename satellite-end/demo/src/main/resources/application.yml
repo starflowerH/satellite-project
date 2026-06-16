@@ -1,0 +1,54 @@
+server:
+  port: ${SERVER_PORT:8088}
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      password: ${REDIS_PASSWORD}
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/dormitory_autonomy_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:app_user}
+    password: ${DB_PASSWORD}
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
+          ssl:
+            enable: ${MAIL_SMTP_SSL:true}
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+app:
+  mail:
+    from: ${MAIL_FROM:${MAIL_USERNAME}}
+    from-name: ${MAIL_FROM_NAME:文旅导览智能体}
+  # 高德地图Key（后端代理用）
+  amap:
+    key: ${AMAP_KEY}
+    route-key: ${AMAP_ROUTE_KEY}
+  # JWT配置
+  jwt:
+    secret: ${JWT_SECRET:myDefaultSecretKeyForJwtTokenGeneration2024!}
+    expiration: ${JWT_EXPIRATION:86400000}
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.example.demo.pojo
+  configuration:
+    map-underscore-to-camel-case: true
+    # 生产环境关闭SQL日志
+    log-impl: ${MYBATIS_LOG:org.apache.ibatis.logging.nologging.NoLoggingImpl}

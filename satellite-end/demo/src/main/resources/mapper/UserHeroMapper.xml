@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.mapper.UserHeroMapper">
+
+    <select id="listByUserId" resultType="com.example.demo.dto.UserHeroVO">
+        SELECT h.id            AS heroId,
+               h.name          AS name,
+               h.gender        AS gender,
+               h.`role`        AS role,
+               uh.create_time  AS selectedTime
+        FROM user_signature_hero uh
+        INNER JOIN hero h ON h.id = uh.hero_id
+        WHERE uh.user_id = #{userId}
+        ORDER BY uh.create_time ASC, uh.id ASC
+    </select>
+
+    <select id="countByUserId" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM user_signature_hero
+        WHERE user_id = #{userId}
+    </select>
+
+    <select id="countByUserIdAndHeroId" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM user_signature_hero
+        WHERE user_id = #{userId}
+          AND hero_id = #{heroId}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO user_signature_hero (user_id, hero_id)
+        VALUES (#{userId}, #{heroId})
+    </insert>
+
+    <delete id="deleteByUserId">
+        DELETE FROM user_signature_hero
+        WHERE user_id = #{userId}
+    </delete>
+
+    <delete id="deleteByUserIdAndHeroId">
+        DELETE FROM user_signature_hero
+        WHERE user_id = #{userId}
+          AND hero_id = #{heroId}
+    </delete>
+
+</mapper>
+

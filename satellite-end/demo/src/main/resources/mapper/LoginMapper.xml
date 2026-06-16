@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.mapper.LoginMapper">
+
+    <resultMap id="LoginResultMap" type="com.example.demo.pojo.Login">
+        <id     column="user_id"   property="userId"/>
+
+        <result column="phone"    property="phone"/>
+        <result column="email"    property="email"/>
+        <result column="password" property="password"/>
+        <result column="status"   property="status"/>
+    </resultMap>
+
+    <select id="findByPhone" resultMap="LoginResultMap">
+        SELECT * FROM login WHERE phone = #{phone} LIMIT 1
+    </select>
+
+    <select id="findByEmail" resultMap="LoginResultMap">
+        SELECT * FROM login WHERE email = #{email} LIMIT 1
+    </select>
+
+    <select id="findByUserId" resultMap="LoginResultMap">
+        SELECT * FROM login WHERE user_id = #{userId} LIMIT 1
+    </select>
+
+    <insert id="insertByPhone">
+        INSERT INTO login (phone, password, status)
+        VALUES (#{phone}, #{password}, #{status})
+    </insert>
+
+    <insert id="insertByEmail">
+        INSERT INTO login (email, password, status)
+        VALUES (#{email}, #{password}, #{status})
+    </insert>
+
+    <update id="updatePasswordByPhone">
+        UPDATE login SET password = #{password} WHERE phone = #{phone}
+    </update>
+
+    <update id="updatePasswordByEmail">
+        UPDATE login SET password = #{password} WHERE email = #{email}
+    </update>
+
+    <update id="updatePhone">
+        UPDATE login SET phone = #{phone} WHERE user_id = #{userId}
+    </update>
+
+    <update id="updateEmail">
+        UPDATE login SET email = #{email} WHERE user_id = #{userId}
+    </update>
+
+    <select id="listAllUsers" resultType="com.example.demo.dto.UserManageVO">
+        SELECT l.user_id   AS userId,
+               u.name      AS name,
+               u.avatar    AS avatar,
+               u.signature AS signature,
+               l.phone     AS phone,
+               l.email     AS email,
+               l.status    AS status
+        FROM login l
+        LEFT JOIN user u ON u.id = l.user_id
+        ORDER BY l.user_id ASC
+    </select>
+
+    <update id="updateStatus">
+        UPDATE login SET status = #{status} WHERE user_id = #{userId}
+    </update>
+
+    <delete id="deleteByUserId">
+        DELETE FROM login WHERE user_id = #{userId}
+    </delete>
+
+</mapper>

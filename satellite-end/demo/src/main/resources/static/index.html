@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>接口测试</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Segoe UI", sans-serif; background: #f0f2f5; min-height: 100vh; display: flex; flex-direction: column; }
+
+    header {
+      background: #1677ff;
+      color: #fff;
+      padding: 16px 32px;
+      font-size: 18px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      flex-shrink: 0;
+    }
+
+    /* 主内容区：垂直居中，水平偏右 */
+    .main-content {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 40px 150px 40px 0;
+    }
+
+    /* 固定尺寸的卡片容器 */
+    .card-wrap {
+      position: relative;
+      width: 680px;
+      height: 580px;
+      background: #fff;
+      border-radius: 8px 0 0 8px;
+      box-shadow: -4px 0 16px rgba(0,0,0,.1);
+      overflow: hidden;
+    }
+
+    /* 所有 panel 绝对定位叠放 */
+    .panel {
+      position: absolute;
+      inset: 0;
+      padding: 36px 48px 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .panel.active { opacity: 1; pointer-events: auto; }
+
+    /* 右下角小字导航 */
+    .corner-links {
+      position: absolute;
+      bottom: 16px;
+      right: 24px;
+      display: flex;
+      gap: 16px;
+    }
+    .corner-link {
+      font-size: 12px;
+      color: #999;
+      cursor: pointer;
+      text-decoration: none;
+      transition: color .2s;
+    }
+    .corner-link:hover { color: #1677ff; }
+    .corner-link.cur { color: #1677ff; font-weight: bold; cursor: default; }
+
+    /* 子 Tab（登录面板内） */
+    .sub-tabs {
+      display: flex;
+      border-bottom: 2px solid #f0f0f0;
+      margin-bottom: 18px;
+    }
+    .sub-tab {
+      padding: 7px 18px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #888;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: .2s;
+    }
+    .sub-tab.active { color: #1677ff; border-bottom-color: #1677ff; font-weight: bold; }
+    .sub-panel { display: none; }
+    .sub-panel.active { display: block; }
+
+    /* 验证码子选项（手机/邮箱切换） */
+    .toggle-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .toggle-btn {
+      padding: 4px 14px;
+      font-size: 12px;
+      border: 1px solid #d9d9d9;
+      border-radius: 20px;
+      cursor: pointer;
+      background: #fff;
+      color: #666;
+      transition: .2s;
+    }
+    .toggle-btn.active {
+      background: #e6f0ff;
+      border-color: #1677ff;
+      color: #1677ff;
+    }
+
+    h3 { margin-bottom: 18px; color: #333; font-size: 17px; font-weight: bold; }
+
+    .form-row { margin-bottom: 12px; display: flex; flex-direction: column; gap: 5px; }
+    label { font-size: 13px; color: #666; }
+    input {
+      padding: 9px 12px;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+      transition: border .2s;
+      width: 100%;
+    }
+    input:focus { border-color: #1677ff; }
+
+    .phone-row { display: flex; gap: 8px; }
+    .phone-row input { flex: 1; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 10px; }
+    button.primary {
+      padding: 9px 28px;
+      background: #1677ff;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background .2s;
+    }
+    button.primary:hover { background: #0958d9; }
+    button.secondary {
+      padding: 9px 14px;
+      background: #fff;
+      color: #1677ff;
+      border: 1px solid #1677ff;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: .2s;
+    }
+    button.secondary:hover { background: #e6f0ff; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    .result-box {
+      margin-top: 10px;
+      background: #f6f8fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 9px 14px;
+      font-size: 12px;
+      color: #333;
+      min-height: 40px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .result-box.ok  { border-color: #52c41a; background: #f6ffed; color: #389e0d; }
+    .result-box.err { border-color: #ff4d4f; background: #fff2f0; color: #cf1322; }
+    .code-tip { min-height: 30px; margin-top: 0; margin-bottom: 6px; padding: 6px 14px; }
+
+    /* 图形验证码 */
+    .captcha-row { display: flex; align-items: center; gap: 10px; }
+    .captcha-row input { flex: 1; }
+    #r-captcha-canvas {
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      cursor: pointer;
+      flex-shrink: 0;
+      background: #1a1a2e;
+      width: 110px;
+      height: 38px;
+    }
+    .captcha-hint { font-size: 11px; color: #aaa; margin-top: 3px; }
+
+    /* 个人信息面板分区 */
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1677ff;
+      margin: 10px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #e8edf3;
+    }
+    .section-divider {
+      height: 1px;
+      background: #f0f0f0;
+      margin: 14px 0;
+    }
+  </style>
+</head>
+<body>
+
+<header>登录模块接口测试</header>
+
+<div class="main-content">
+  <div class="card-wrap">
+
+    <!-- ===== 登录（默认显示） ===== -->
+    <div id="panel-login" class="panel active">
+      <h3>欢迎登录</h3>
+      <div class="sub-tabs">
+        <div class="sub-tab active" onclick="switchSubTab('login','pwd')">密码登录</div>
+        <div class="sub-tab" onclick="switchSubTab('login','sms')">短信验证码</div>
+        <div class="sub-tab" onclick="switchSubTab('login','email')">邮箱验证码</div>
+      </div>
+
+      <!-- 密码登录：账号（手机/邮箱/用户名）+ 密码 -->
+      <div id="login-sub-pwd" class="sub-panel active">
+        <div class="form-row">
+          <label>账号</label>
+          <input id="lp-identifier" placeholder="手机号 / 邮箱 / 用户名" />
+        </div>
+        <div class="form-row">
+          <label>密码</label>
+          <input id="lp-password" type="password" placeholder="请输入密码" />
+        </div>
+        <div class="btn-row">
+          <button class="primary" onclick="loginByPassword()">登录</button>
+        </div>
+        <div class="result-box" id="lp-result">等待请求...</div>
+      </div>
+
+      <!-- 短信验证码登录 -->
+      <div id="login-sub-sms" class="sub-panel">
+        <div class="form-row">
+          <label>手机号</label>
+          <div class="phone-row">
+            <input id="lc-phone" placeholder="请输入手机号" />
+            <button class="secondary" id="lc-send-btn" onclick="sendSmsCode('lc-phone','lc-code-tip','lc-send-btn')">获取验证码</button>
+          </div>
+        </div>
+        <div class="result-box code-tip" id="lc-code-tip">-</div>
+        <div class="form-row">
+          <label>验证码</label>
+          <input id="lc-code" placeholder="请输入短信验证码" />
+        </div>
+        <div class="btn-row">
+          <button class="primary" onclick="loginByCode()">登录</button>
+        </div>
+        <div class="result-box" id="lc-result">等待请求...</div>
+      </div>
+
+      <!-- 邮箱验证码登录 -->
+      <div id="login-sub-email" class="sub-panel">
+        <div class="form-row">
+          <label>邮箱</label>
+          <div class="phone-row">
+            <input id="le-email" placeholder="请输入邮箱地址" />
+            <button class="secondary" id="le-send-btn" onclick="sendEmailCode('le-email','le-code-tip','le-send-btn')">获取验证码</button>
+          </div>
+        </div>
+        <div class="result-box code-tip" id="le-code-tip">-</div>
+        <div class="form-row">
+          <label>验证码</label>
+          <input id="le-code" placeholder="请输入邮箱验证码" />
+        </div>
+        <div class="btn-row">
+          <button class="primary" onclick="loginByEmailCode()">登录</button>
+        </div>
+        <div class="result-box" id="le-result">等待请求...</div>
+      </div>
+    </div>
+
+    <!-- ===== 注册 ===== -->
+    <div id="panel-register" class="panel">
+      <h3>注册账号</h3>
+
+      <!-- 手机 / 邮箱 注册切换 -->
+      <div class="toggle-row">
+        <button class="toggle-btn active" id="r-tog-sms"   onclick="switchRegisterMode('sms')">手机注册</button>
+        <button class="toggle-btn"        id="r-tog-email" onclick="switchRegisterMode('email')">邮箱注册</button>
+      </div>
+
+      <!-- 手机注册 -->
+      <div id="r-sms" class="sub-panel active">
+        <div class="form-row">
+          <label>手机号</label>
+          <div class="phone-row">
+            <input id="r-phone" placeholder="请输入手机号" />
+            <button class="secondary" id="r-send-btn" onclick="sendSmsCode('r-phone','r-sms-tip','r-send-btn')">获取验证码</button>
+          </div>
+        </div>
+        <div class="result-box code-tip" id="r-sms-tip">-</div>
+        <div class="form-row">
+          <label>密码</label>
+          <input id="r-sms-password" type="password" placeholder="请设置密码" />
+        </div>
+        <div class="form-row">
+          <label>短信验证码</label>
+          <input id="r-sms-code" placeholder="请输入短信验证码" />
+        </div>
+        <!-- 图形验证码 -->
+        <div class="form-row">
+          <label>图形验证码</label>
+          <div class="captcha-row">
+            <input id="r-captcha-input" placeholder="请输入图形验证码" maxlength="4" />
+            <canvas id="r-captcha-canvas" width="110" height="38" title="点击刷新"></canvas>
+          </div>
+          <div class="captcha-hint">看不清？点击图片刷新</div>
+        </div>
+        <div class="btn-row">
+          <button class="primary" onclick="register('sms')">注册</button>
+        </div>
+        <div class="result-box" id="r-sms-result">等待请求...</div>
+      </div>
+
+      <!-- 邮箱注册 -->
+      <div id="r-email" class="sub-panel">
+        <div class="form-row">
+          <label>邮箱</label>
+          <div class="phone-row">
+            <input id="r-email-addr" placeholder="请输入邮箱地址" />
+            <button class="secondary" id="r-email-send-btn" onclick="sendEmailCode('r-email-addr','r-email-tip','r-email-send-btn')">获取验证码</button>
+          </div>
+        </div>
+        <div class="result-box code-tip" id="r-email-tip">-</div>
+        <div class="form-row">
+          <label>密码</label>
+          <input id="r-email-password" type="password" placeholder="请设置密码" />
+        </div>
+        <div class="form-row">
+          <label>邮箱验证码</label>
+          <input id="r-email-code" placeholder="请输入邮箱验证码" />
+        </div>
+        <!-- 图形验证码（邮箱注册共用同一 canvas，切换时重绘） -->
+        <div class="form-row">
+          <label>图形验证码</label>
+          <div class="captcha-row">
+            <input id="r-email-captcha-input" placeholder="请输入图形验证码" maxlength="4" />
+            <canvas id="r-email-captcha-canvas" width="110" height="38" title="点击刷新"></canvas>
+          </div>
+          <div class="captcha-hint">看不清？点击图片刷新</div>
+        </div>
+        <div class="btn-row">
+          <button class="primary" onclick="register('email')">注册</button>
+        </div>
+        <div class="result-box" id="r-email-result">等待请求...</div>
+      </div>
+    </div>
+
+    <!-- ===== 重置密码 ===== -->
+    <div id="panel-reset" class="panel">
+      <h3>重置密码</h3>
+
+      <!-- 手机 / 邮箱 切换 -->
+      <div class="toggle-row">
+        <button class="toggle-btn active" id="rp-tog-sms"   onclick="switchResetMode('sms')">手机验证</button>
+        <button class="toggle-btn"        id="rp-tog-email" onclick="switchResetMode('email')">邮箱验证</button>
+      </div>
+
+      <!-- 手机验证 -->
+      <div id="rp-sms" class="sub-panel active">
+        <div class="form-row">
+          <label>手机号</label>
+          <div class="phone-row">
+            <input id="rp-phone" placeholder="请输入手机号" />
+            <button class="secondary" id="rp-send-btn" onclick="sendSmsCode('rp-phone','rp-code-tip','rp-send-btn')">获取验证码</button>
+          </div>
+        </div>
+        <div class="result-box code-tip" id="rp-code-tip">-</div>
+        <div class="form-row">
+          <label>短信验证码</label>
+          <input id="rp-code" placeholder="请输入短信验证码" />
+        </div>
+        <div class="form-row">
+          <label>新密码</label>
+          <input id="rp-newpwd" type="password" placeholder="请输入新密码" />
+        </div>
+        <div class="btn-row">
+          <button class="primary" onclick="resetPasswordBySms()">重置密码</button>
+        </div>
+        <div class="result-box" id="rp-sms-result">等待请求...</div>
+      </div>
+
+      <!-- 邮箱验证 -->
+      <div id="rp-email" class="sub-panel">
+        <div class="form-row">
+          <label>邮箱</label>
+          <div class="phone-row">
+            <input id="rpe-email" placeholder="请输入邮箱地址" />
+            <button class="secondary" id="rpe-send-btn" onclick="sendEmailCode('rpe-email','rpe-code-tip','rpe-send-btn')">获取验证码</button>
+          </div>
+        </div>
+        <div class="result-box code-tip" id="rpe-code-tip">-</div>
+        <div class="form-row">
+          <label>邮箱验证码</label>
+          <input id="rpe-code" placeholder="请输入邮箱验证码" />
+        </div>
+        <div class="form-row">
+          <label>新密码</label>
+          <input id="rpe-newpwd" type="password" placeholder="请输入新密码" />
+        </div>
+        <div class="btn-row">
+          <button class="primary" onclick="resetPasswordByEmail()">重置密码</button>
+        </div>
+        <div class="result-box" id="rp-email-result">等待请求...</div>
+      </div>
+    </div>
+
+    <!-- ===== 个人信息 ===== -->
+    <div id="panel-user" class="panel">
+      <h3>个人信息</h3>
+
+      <!-- 查询用户信息 -->
+      <div class="section-title">查看用户信息</div>
+      <div class="form-row">
+        <label>用户ID</label>
+        <div class="phone-row">
+          <input id="ui-userid" placeholder="请输入用户ID" />
+          <button class="secondary" onclick="loadUserInfo()">查询</button>
+        </div>
+      </div>
+      <div class="result-box" id="ui-result">等待查询...</div>
+
+      <div class="section-divider"></div>
+
+      <!-- 修改基本信息 -->
+      <div class="section-title">修改基本信息</div>
+      <div class="form-row">
+        <label>用户ID</label>
+        <input id="ub-userid" placeholder="用户ID（必填）" />
+      </div>
+      <div class="form-row">
+        <label>昵称</label>
+        <input id="ub-name" placeholder="新昵称（可选）" />
+      </div>
+      <div class="form-row">
+        <label>头像URL</label>
+        <input id="ub-avatar" placeholder="新头像URL（可选）" />
+      </div>
+      <div class="form-row">
+        <label>个性签名</label>
+        <input id="ub-signature" placeholder="新签名（可选）" />
+      </div>
+      <div class="btn-row">
+        <button class="primary" onclick="updateBasicInfo()">保存基本信息</button>
+      </div>
+      <div class="result-box" id="ub-result">等待请求...</div>
+
+      <div class="section-divider"></div>
+
+      <!-- 修改手机号 -->
+      <div class="section-title">修改绑定手机号</div>
+      <div class="form-row">
+        <label>用户ID</label>
+        <input id="up-userid" placeholder="用户ID（必填）" />
+      </div>
+      <div class="form-row">
+        <label>新手机号</label>
+        <div class="phone-row">
+          <input id="up-phone" placeholder="请输入新手机号" />
+          <button class="secondary" id="up-send-btn" onclick="sendSmsCode('up-phone','up-sms-tip','up-send-btn')">获取验证码</button>
+        </div>
+      </div>
+      <div class="result-box code-tip" id="up-sms-tip">-</div>
+      <div class="form-row">
+        <label>短信验证码</label>
+        <input id="up-code" placeholder="请输入短信验证码" />
+      </div>
+      <div class="btn-row">
+        <button class="primary" onclick="updatePhone()">绑定新手机号</button>
+      </div>
+      <div class="result-box" id="up-result">等待请求...</div>
+
+      <div class="section-divider"></div>
+
+      <!-- 修改邮箱 -->
+      <div class="section-title">修改绑定邮箱</div>
+      <div class="form-row">
+        <label>用户ID</label>
+        <input id="ue-userid" placeholder="用户ID（必填）" />
+      </div>
+      <div class="form-row">
+        <label>新邮箱</label>
+        <div class="phone-row">
+          <input id="ue-email" placeholder="请输入新邮箱地址" />
+          <button class="secondary" id="ue-send-btn" onclick="sendEmailCode('ue-email','ue-email-tip','ue-send-btn')">获取验证码</button>
+        </div>
+      </div>
+      <div class="result-box code-tip" id="ue-email-tip">-</div>
+      <div class="form-row">
+        <label>邮箱验证码</label>
+        <input id="ue-code" placeholder="请输入邮箱验证码" />
+      </div>
+      <div class="btn-row">
+        <button class="primary" onclick="updateEmail()">绑定新邮箱</button>
+      </div>
+      <div class="result-box" id="ue-result">等待请求...</div>
+    </div>
+
+    <!-- 右下角小字导航 -->
+    <div class="corner-links">
+      <span class="corner-link cur"  id="link-login"    onclick="switchPanel('login')">登录</span>
+      <span class="corner-link"      id="link-register" onclick="switchPanel('register')">注册账号</span>
+      <span class="corner-link"      id="link-reset"    onclick="switchPanel('reset')">忘记密码</span>
+      <span class="corner-link"      id="link-user"     onclick="switchPanel('user')">个人信息</span>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ===== 面板切换 =====
+  const PANELS = ['login','register','reset','user'];
+  function switchPanel(name) {
+    PANELS.forEach(p => {
+      document.getElementById('panel-' + p).classList.toggle('active', p === name);
+      document.getElementById('link-' + p).classList.toggle('cur', p === name);
+    });
+    if (name === 'register') drawCaptcha();
+  }
+
+  // ===== 注册：手机/邮箱切换 =====
+  function switchRegisterMode(mode) {
+    ['sms','email'].forEach(m => {
+      document.getElementById('r-' + m).classList.toggle('active', m === mode);
+      document.getElementById('r-tog-' + m).classList.toggle('active', m === mode);
+    });
+    // 切换时重绘图形验证码
+    drawCaptcha();
+    document.getElementById('r-captcha-input').value = '';
+    document.getElementById('r-email-captcha-input').value = '';
+  }
+
+  // ===== 重置密码：手机/邮箱切换 =====
+  function switchResetMode(mode) {
+    ['sms','email'].forEach(m => {
+      document.getElementById('rp-' + m).classList.toggle('active', m === mode);
+      document.getElementById('rp-tog-' + m).classList.toggle('active', m === mode);
+    });
+  }
+
+  // ===== 图形验证码（手机注册） =====
+  let rCaptchaText = '';
+  function drawCaptcha() {
+    const canvas = document.getElementById('r-captcha-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    rCaptchaText = '';
+    for (let i = 0; i < 4; i++) rCaptchaText += chars[Math.floor(Math.random() * chars.length)];
+
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, W, H);
+
+    for (let i = 0; i < 5; i++) {
+      ctx.strokeStyle = `hsl(${Math.random()*360},70%,60%)`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(Math.random()*W, Math.random()*H);
+      ctx.lineTo(Math.random()*W, Math.random()*H);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = `hsl(${Math.random()*360},60%,65%)`;
+      ctx.beginPath();
+      ctx.arc(Math.random()*W, Math.random()*H, 1.2, 0, 2*Math.PI);
+      ctx.fill();
+    }
+    const colors = ['#ffffff','#00e5ff','#ffeb3b','#76ff03','#ff80ab'];
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.font = `bold ${22 + Math.random()*4}px "Courier New", monospace`;
+      ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+      ctx.shadowColor = 'rgba(255,255,255,0.4)';
+      ctx.shadowBlur = 4;
+      ctx.translate(14 + i * 26, H/2 + (Math.random()-0.5)*4);
+      ctx.rotate((Math.random()-0.5)*0.4);
+      ctx.fillText(rCaptchaText[i], 0, 0);
+      ctx.restore();
+    }
+  }
+
+  // ===== 图形验证码（邮箱注册） =====
+  let rEmailCaptchaText = '';
+  function drawEmailCaptcha() {
+    const canvas = document.getElementById('r-email-captcha-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    rEmailCaptchaText = '';
+    for (let i = 0; i < 4; i++) rEmailCaptchaText += chars[Math.floor(Math.random() * chars.length)];
+
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, W, H);
+
+    for (let i = 0; i < 5; i++) {
+      ctx.strokeStyle = `hsl(${Math.random()*360},70%,60%)`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(Math.random()*W, Math.random()*H);
+      ctx.lineTo(Math.random()*W, Math.random()*H);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = `hsl(${Math.random()*360},60%,65%)`;
+      ctx.beginPath();
+      ctx.arc(Math.random()*W, Math.random()*H, 1.2, 0, 2*Math.PI);
+      ctx.fill();
+    }
+    const colors = ['#ffffff','#00e5ff','#ffeb3b','#76ff03','#ff80ab'];
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.font = `bold ${22 + Math.random()*4}px "Courier New", monospace`;
+      ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+      ctx.shadowColor = 'rgba(255,255,255,0.4)';
+      ctx.shadowBlur = 4;
+      ctx.translate(14 + i * 26, H/2 + (Math.random()-0.5)*4);
+      ctx.rotate((Math.random()-0.5)*0.4);
+      ctx.fillText(rEmailCaptchaText[i], 0, 0);
+      ctx.restore();
+    }
+  }
+
+  // ===== 登录子 Tab（pwd / sms / email） =====
+  function switchSubTab(panel, name) {
+    const tabs = document.querySelectorAll('#panel-' + panel + ' .sub-tab');
+    const subPanels = document.querySelectorAll('#panel-' + panel + ' .sub-panel');
+    const keys = panel === 'login' ? ['pwd','sms','email'] : [];
+    tabs.forEach((t, i) => t.classList.toggle('active', keys[i] === name));
+    subPanels.forEach(sp => {
+      sp.classList.toggle('active', sp.id === panel + '-sub-' + name);
+    });
+  }
+
+  // ===== 工具 =====
+  function showResult(id, data) {
+    const el = document.getElementById(id);
+    el.textContent = JSON.stringify(data, null, 2);
+    el.className = 'result-box ' + (data.code === 200 ? 'ok' : 'err');
+  }
+
+  async function request(url, method, body, resultId) {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      showResult(resultId, await res.json());
+    } catch (e) {
+      const el = document.getElementById(resultId);
+      el.textContent = '请求失败：' + e.message;
+      el.className = 'result-box err';
+    }
+  }
+
+  // 发送短信验证码（带60秒冷却倒计时）
+  async function sendSmsCode(inputId, tipId, btnId) {
+    const phone = document.getElementById(inputId).value.trim();
+    if (!phone) { alert('请先输入手机号'); return; }
+    const btn = document.getElementById(btnId);
+    btn.disabled = true;
+    await request('auth/code?phone=' + encodeURIComponent(phone), 'GET', null, tipId);
+    startCooldown(btn);
+  }
+
+  // 发送邮箱验证码（带60秒冷却倒计时）
+  async function sendEmailCode(inputId, tipId, btnId) {
+    const email = document.getElementById(inputId).value.trim();
+    if (!email) { alert('请先输入邮箱地址'); return; }
+    const btn = document.getElementById(btnId);
+    btn.disabled = true;
+    await request('auth/email-code?email=' + encodeURIComponent(email), 'GET', null, tipId);
+    startCooldown(btn);
+  }
+
+  function startCooldown(btn) {
+    let sec = 60;
+    btn.textContent = sec + 's后重试';
+    const timer = setInterval(() => {
+      sec--;
+      if (sec <= 0) {
+        clearInterval(timer);
+        btn.disabled = false;
+        btn.textContent = '获取验证码';
+      } else {
+        btn.textContent = sec + 's后重试';
+      }
+    }, 1000);
+  }
+
+  // ===== 注册 =====
+  function register(mode) {
+    let payload = {};
+    let captchaInput, captchaText, resultId;
+
+    if (mode === 'sms') {
+      captchaInput = document.getElementById('r-captcha-input').value.trim().toUpperCase();
+      captchaText = rCaptchaText;
+      resultId = 'r-sms-result';
+      if (captchaInput !== captchaText) {
+        const el = document.getElementById(resultId);
+        el.textContent = '图形验证码错误，请重新输入';
+        el.className = 'result-box err';
+        drawCaptcha();
+        document.getElementById('r-captcha-input').value = '';
+        return;
+      }
+      payload = {
+        phone:    document.getElementById('r-phone').value,
+        password: document.getElementById('r-sms-password').value,
+        code:     document.getElementById('r-sms-code').value
+      };
+      drawCaptcha();
+      document.getElementById('r-captcha-input').value = '';
+    } else if (mode === 'email') {
+      captchaInput = document.getElementById('r-email-captcha-input').value.trim().toUpperCase();
+      captchaText = rEmailCaptchaText;
+      resultId = 'r-email-result';
+      if (captchaInput !== captchaText) {
+        const el = document.getElementById(resultId);
+        el.textContent = '图形验证码错误，请重新输入';
+        el.className = 'result-box err';
+        drawEmailCaptcha();
+        document.getElementById('r-email-captcha-input').value = '';
+        return;
+      }
+      payload = {
+        email:    document.getElementById('r-email-addr').value,
+        password: document.getElementById('r-email-password').value,
+        code:     document.getElementById('r-email-code').value
+      };
+      drawEmailCaptcha();
+      document.getElementById('r-email-captcha-input').value = '';
+    }
+
+    request('auth/register', 'POST', payload, resultId);
+  }
+
+  // ===== 登录 =====
+  function loginByPassword() {
+    request('auth/login/password', 'POST', {
+      identifier: document.getElementById('lp-identifier').value,
+      password:   document.getElementById('lp-password').value
+    }, 'lp-result');
+  }
+
+  function loginByCode() {
+    request('auth/login/code', 'POST', {
+      phone: document.getElementById('lc-phone').value,
+      code:  document.getElementById('lc-code').value
+    }, 'lc-result');
+  }
+
+  function loginByEmailCode() {
+    request('auth/login/email-code', 'POST', {
+      email: document.getElementById('le-email').value,
+      code:  document.getElementById('le-code').value
+    }, 'le-result');
+  }
+
+  // ===== 重置密码 =====
+  function resetPasswordBySms() {
+    request('auth/reset-password', 'POST', {
+      phone:       document.getElementById('rp-phone').value,
+      code:        document.getElementById('rp-code').value,
+      newPassword: document.getElementById('rp-newpwd').value
+    }, 'rp-sms-result');
+  }
+
+  function resetPasswordByEmail() {
+    request('auth/reset-password', 'POST', {
+      email:       document.getElementById('rpe-email').value,
+      code:        document.getElementById('rpe-code').value,
+      newPassword: document.getElementById('rpe-newpwd').value
+    }, 'rp-email-result');
+  }
+
+  // ===== 个人信息 =====
+  async function loadUserInfo() {
+    const userId = document.getElementById('ui-userid').value.trim();
+    if (!userId) { alert('请输入用户ID'); return; }
+    await request('user/' + userId, 'GET', null, 'ui-result');
+  }
+
+  function updateBasicInfo() {
+    const userId = document.getElementById('ub-userid').value.trim();
+    if (!userId) { alert('请输入用户ID'); return; }
+    const payload = { userId: Number(userId) };
+    const name = document.getElementById('ub-name').value.trim();
+    const avatar = document.getElementById('ub-avatar').value.trim();
+    const signature = document.getElementById('ub-signature').value.trim();
+    if (name) payload.name = name;
+    if (avatar) payload.avatar = avatar;
+    if (signature) payload.signature = signature;
+    if (!name && !avatar && !signature) { alert('请至少填写一项要修改的内容'); return; }
+    request('user/update', 'PUT', payload, 'ub-result');
+  }
+
+  function updatePhone() {
+    const userId = document.getElementById('up-userid').value.trim();
+    const newPhone = document.getElementById('up-phone').value.trim();
+    const phoneCode = document.getElementById('up-code').value.trim();
+    if (!userId) { alert('请输入用户ID'); return; }
+    if (!newPhone) { alert('请输入新手机号'); return; }
+    if (!phoneCode) { alert('请输入短信验证码'); return; }
+    request('user/update', 'PUT', {
+      userId: Number(userId),
+      newPhone,
+      phoneCode
+    }, 'up-result');
+  }
+
+  function updateEmail() {
+    const userId = document.getElementById('ue-userid').value.trim();
+    const newEmail = document.getElementById('ue-email').value.trim();
+    const emailCode = document.getElementById('ue-code').value.trim();
+    if (!userId) { alert('请输入用户ID'); return; }
+    if (!newEmail) { alert('请输入新邮箱地址'); return; }
+    if (!emailCode) { alert('请输入邮箱验证码'); return; }
+    request('user/update', 'PUT', {
+      userId: Number(userId),
+      newEmail,
+      emailCode
+    }, 'ue-result');
+  }
+
+  // 初始化
+  drawCaptcha();
+  document.getElementById('r-captcha-canvas').addEventListener('click', drawCaptcha);
+  drawEmailCaptcha();
+  document.getElementById('r-email-captcha-canvas').addEventListener('click', drawEmailCaptcha);
+
+</script>
+</body>
+</html>
