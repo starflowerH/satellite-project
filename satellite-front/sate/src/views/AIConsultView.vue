@@ -278,39 +278,29 @@ onMounted(() => {
 <template>
   <div class="ai-consult-view">
     <section class="consult-shell">
+      <!-- 精简 Header：一行布局 -->
       <header class="consult-header">
-        <div>
-          <p class="eyebrow">AI Command Link</p>
-          <h1>峡谷卫星 指挥终端</h1>
-          <p class="subtitle">沉浸式对话面板，用于阵容分析、版本理解与实战咨询。</p>
-        </div>
-
-        <div class="header-actions">
-          <div class="agent-control">
-            <span class="agent-label">策略体</span>
-            <select v-model="selectedAgentId" class="agent-select" :disabled="isAgentLoading || !agents.length">
-              <option value="" disabled>请选择 Agent</option>
-              <option v-for="agent in agents" :key="agent.agentId" :value="agent.agentId">
-                {{ agent.name }}
-              </option>
-            </select>
-          </div>
-
+        <div class="header-left">
+          <h1 class="header-title">🛰️ AI 助手</h1>
+          <select v-model="selectedAgentId" class="agent-select" :disabled="isAgentLoading || !agents.length">
+            <option value="" disabled>选择 Agent</option>
+            <option v-for="agent in agents" :key="agent.agentId" :value="agent.agentId">
+              {{ agent.name }}
+            </option>
+          </select>
           <div class="status-chip" :class="{ 'status-chip--offline': !selectedAgentId && !isAgentLoading }">
             <span class="status-dot" />
             <span>{{ statusText }}</span>
           </div>
-
-          <button class="close-btn" type="button" aria-label="关闭咨询窗口" @click="closePanel">
-            ×
-          </button>
         </div>
+        <button class="close-btn" type="button" aria-label="关闭" @click="closePanel">×</button>
       </header>
 
       <div v-if="noticeText" class="notice-banner" :class="`notice-banner--${noticeType}`">
         {{ noticeText }}
       </div>
 
+      <!-- 消息列表：占据主要空间 -->
       <div ref="messageListRef" class="message-list">
         <article
           v-for="message in messages"
@@ -318,161 +308,117 @@ onMounted(() => {
           class="message-row"
           :class="`message-row--${message.role}`"
         >
-          <div v-if="message.role === 'ai'" class="ai-avatar" aria-hidden="true">
-            <span class="avatar-ring avatar-ring--outer" />
-            <span class="avatar-ring avatar-ring--inner" />
-            <span class="avatar-core">SAT</span>
-          </div>
+          <div v-if="message.role === 'ai'" class="ai-avatar" aria-hidden="true">AI</div>
 
           <div class="message-content">
             <div class="message-bubble" :class="`message-bubble--${message.role}`">
               <template v-if="isThinkingMessage(message)">
-                <span class="thinking-label">{{ selectedAgentName }} 正在思考</span>
                 <span class="thinking-dots" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
+                  <i /><i /><i />
                 </span>
+                <span class="thinking-label">{{ selectedAgentName }} 思考中...</span>
               </template>
               <template v-else>
                 {{ message.content }}
               </template>
             </div>
-
             <span class="message-time">{{ message.timestamp }}</span>
           </div>
         </article>
       </div>
 
+      <!-- 紧凑输入区 -->
       <footer class="input-area">
-        <div class="input-shell">
-          <textarea
-            v-model="draft"
-            class="chat-input"
-            rows="1"
-            maxlength="300"
-            :placeholder="selectedAgentId ? '输入你的问题，例如：帮我分析当前阵容后期团战怎么打' : '请先连接可用 Agent 后再发送问题'"
-            :disabled="isSending || isAgentLoading || !selectedAgentId"
-            @keydown="handleKeydown"
-          />
-
-          <button class="send-button" :disabled="!canSend || !selectedAgentId" @click="sendMessage">
-            {{ isSending ? '发送中' : '发送' }}
-          </button>
-        </div>
+        <textarea
+          v-model="draft"
+          class="chat-input"
+          rows="1"
+          maxlength="300"
+          :placeholder="selectedAgentId ? '输入问题...' : '请先选择 Agent'"
+          :disabled="isSending || isAgentLoading || !selectedAgentId"
+          @keydown="handleKeydown"
+        />
+        <button class="send-button" :disabled="!canSend || !selectedAgentId" @click="sendMessage">
+          {{ isSending ? '...' : '发送' }}
+        </button>
       </footer>
     </section>
   </div>
 </template>
 
 <style scoped>
+/* ========== 整体布局：撑满可用空间 ========== */
 .ai-consult-view {
-  min-height: calc(100vh - var(--navbar-height) - 80px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  height: calc(100vh - var(--navbar-height));
   background: transparent;
+  padding: 12px 16px;
+  padding-bottom: calc(12px + var(--safe-area-bottom));
 }
 
 .consult-shell {
-  position: relative;
-  width: min(70vw, 1080px);
-  height: min(78vh, 860px);
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.85);
+  height: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 28px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
   overflow: hidden;
-  animation: panel-in 0.35s ease-out;
 }
 
+/* ========== 紧凑 Header ========== */
 .consult-header {
-  position: relative;
-  z-index: 1;
-  padding: 14px 22px 10px;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  align-items: center;
+  padding: 10px 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  gap: 12px;
+  flex-shrink: 0;
 }
 
-.header-actions {
+.header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
-.agent-control {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.agent-label {
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(153, 194, 226, 0.68);
+.header-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .agent-select {
-  min-width: 164px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 12px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   background: rgba(255, 255, 255, 0.8);
   color: var(--text-primary);
+  font-size: 13px;
   outline: none;
-}
-
-.agent-select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.eyebrow {
-  margin: 0 0 4px;
-  font-family: 'Orbitron', 'Rajdhani', sans-serif;
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--accent-cyan);
-}
-
-.consult-header h1 {
-  margin: 0;
-  font-family: 'Orbitron', 'Rajdhani', sans-serif;
-  font-size: clamp(18px, 1.8vw, 28px);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-primary);
-}
-
-.subtitle {
-  margin: 3px 0 0;
-  max-width: 420px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-secondary);
+  max-width: 140px;
 }
 
 .status-chip {
-  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 11px;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid rgba(34, 197, 94, 0.2);
   background: rgba(34, 197, 94, 0.06);
   color: #16A34A;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .status-chip--offline {
@@ -482,8 +428,8 @@ onMounted(() => {
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #22C55E;
 }
@@ -493,77 +439,67 @@ onMounted(() => {
 }
 
 .close-btn {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  display: flex;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(0, 0, 0, 0.04);
   color: var(--text-secondary);
-  font-size: 22px;
-  line-height: 1;
+  font-size: 18px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  flex-shrink: 0;
 }
 
 .close-btn:hover {
-  transform: translateY(-1px);
-  border-color: rgba(0, 0, 0, 0.12);
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.08);
 }
 
+/* ========== 通知条 ========== */
 .notice-banner {
-  position: relative;
-  z-index: 1;
-  margin: 10px 22px 0;
-  padding: 10px 14px;
-  border-radius: 14px;
+  margin: 0;
+  padding: 8px 16px;
   font-size: 13px;
-  line-height: 1.5;
+  flex-shrink: 0;
 }
 
 .notice-banner--info {
   color: #1E40AF;
   background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
 }
 
 .notice-banner--error {
   color: #DC2626;
   background: rgba(239, 68, 68, 0.06);
-  border: 1px solid rgba(239, 68, 68, 0.12);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.1);
 }
 
+/* ========== 消息列表：占据主要空间 ========== */
 .message-list {
-  position: relative;
-  z-index: 1;
   flex: 1;
-  padding: 18px 22px 14px;
   overflow-y: auto;
+  padding: 16px;
   scroll-behavior: smooth;
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+  scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
 }
 
 .message-list::-webkit-scrollbar {
-  width: 5px;
-}
-
-.message-list::-webkit-scrollbar-track {
-  background: transparent;
+  width: 4px;
 }
 
 .message-list::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.12);
   border-radius: 999px;
 }
 
 .message-row {
   display: flex;
-  margin-bottom: 22px;
-  gap: 14px;
+  margin-bottom: 16px;
+  gap: 10px;
 }
 
 .message-row--user {
@@ -575,299 +511,175 @@ onMounted(() => {
 }
 
 .ai-avatar {
-  position: relative;
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.avatar-ring,
-.avatar-core {
-  position: absolute;
   border-radius: 50%;
-}
-
-.avatar-ring--outer {
-  inset: 0;
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.avatar-ring--inner {
-  inset: 7px;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-}
-
-.avatar-core {
-  inset: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background: linear-gradient(135deg, var(--accent-cyan), #60A5FA);
   color: #fff;
-  font-family: 'Orbitron', 'Rajdhani', sans-serif;
   font-size: 10px;
-  letter-spacing: 0.2em;
-  text-indent: 0.2em;
+  font-weight: 700;
 }
 
 .message-content {
-  max-width: min(70%, 680px);
+  max-width: 75%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .message-row--user .message-content {
   align-items: flex-end;
 }
 
-.message-row--ai .message-content {
-  align-items: flex-start;
-}
-
 .message-bubble {
-  padding: 14px 18px;
-  line-height: 1.75;
-  font-size: 15px;
+  padding: 10px 14px;
+  line-height: 1.6;
+  font-size: 14px;
   word-break: break-word;
   white-space: pre-wrap;
 }
 
 .message-bubble--user {
   background: var(--accent-cyan);
-  border: none;
-  border-radius: 20px 20px 8px 20px;
+  border-radius: 16px 16px 4px 16px;
   color: #fff;
 }
 
 .message-bubble--ai {
-  padding-left: 0;
-  background: transparent;
-  border: none;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 16px 16px 16px 4px;
   color: var(--text-primary);
 }
 
 .message-time {
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  color: rgba(138, 162, 186, 0.65);
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  padding: 0 4px;
 }
 
 .thinking-label {
-  display: inline-block;
-  margin-right: 10px;
+  margin-left: 8px;
+  font-size: 13px;
 }
 
 .thinking-dots {
   display: inline-flex;
-  gap: 6px;
-  vertical-align: middle;
+  gap: 4px;
 }
 
 .thinking-dots i {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--accent-cyan);
   animation: dot-pulse 1.1s infinite ease-in-out;
 }
 
-.thinking-dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
+.thinking-dots i:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots i:nth-child(3) { animation-delay: 0.3s; }
 
-.thinking-dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
+/* ========== 紧凑输入区 ========== */
 .input-area {
-  position: relative;
-  z-index: 1;
-  padding: 10px 18px 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.6) 30%, rgba(255, 255, 255, 0.9));
-}
-
-.input-shell {
   display: flex;
   align-items: flex-end;
-  gap: 16px;
-  padding: 14px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.95);
+  flex-shrink: 0;
 }
 
 .chat-input {
   flex: 1;
-  min-height: 52px;
-  max-height: 140px;
-  resize: none;
-  border: none;
-  outline: none;
-  background: transparent;
+  min-height: 38px;
+  max-height: 100px;
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
   color: var(--text-primary);
-  font-size: 15px;
-  line-height: 1.7;
-  font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+
+.chat-input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
 .chat-input::placeholder {
   color: var(--text-secondary);
-  opacity: 0.6;
-}
-
-.chat-input:disabled {
-  cursor: not-allowed;
-  opacity: 0.78;
+  opacity: 0.5;
 }
 
 .send-button {
-  min-width: 108px;
-  height: 52px;
+  height: 38px;
+  padding: 0 16px;
   border: none;
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--text-secondary);
-  font-family: 'Orbitron', 'Rajdhani', sans-serif;
-  font-size: 14px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent-cyan), #60A5FA);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .send-button:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
-  opacity: 0.72;
-}
-
-.send-button:not(:disabled) {
-  background: linear-gradient(135deg, var(--accent-cyan), #60A5FA);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.25);
 }
 
 .send-button:not(:disabled):hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 @keyframes dot-pulse {
-  0%,
-  80%,
-  100% {
-    transform: scale(0.7);
-    opacity: 0.35;
-  }
-
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.35; }
+  40% { transform: scale(1); opacity: 1; }
 }
 
-@keyframes panel-in {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* ========== 响应式适配 ========== */
-@media (max-width: 1024px) {
-  .ai-consult-view {
-    min-height: calc(100vh - var(--navbar-height) - 64px);
-    padding: 16px;
-  }
-
-  .consult-shell {
-    width: 100%;
-    height: min(82vh, 820px);
-    border-radius: 24px;
-  }
-
-  .consult-header,
-  .message-list {
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-
-  .input-area {
-    padding: 10px 16px 14px;
-  }
-}
-
+/* ========== 移动端适配 ========== */
 @media (max-width: 768px) {
   .ai-consult-view {
-    min-height: calc(100vh - var(--navbar-height));
     padding: 0;
-    align-items: stretch;
   }
 
   .consult-shell {
-    width: 100%;
-    height: calc(100vh - var(--navbar-height));
     border-radius: 0;
     border: none;
+    max-width: none;
   }
 
   .consult-header {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 14px 16px 10px;
+    padding: 8px 12px;
   }
 
-  .consult-header h1 {
-    font-size: 20px;
-  }
-
-  .header-actions {
-    width: 100%;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .agent-control {
-    width: 100%;
+  .header-title {
+    font-size: 14px;
   }
 
   .agent-select {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .subtitle {
-    max-width: none;
+    max-width: 100px;
     font-size: 12px;
   }
 
+  .status-chip {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
   .message-list {
-    padding: 12px 14px 10px;
-  }
-
-  .message-row {
-    margin-bottom: 16px;
-    gap: 10px;
-  }
-
-  .ai-avatar {
-    width: 36px;
-    height: 36px;
-  }
-
-  .avatar-core {
-    font-size: 8px;
+    padding: 12px;
   }
 
   .message-content {
@@ -875,61 +687,16 @@ onMounted(() => {
   }
 
   .message-bubble {
-    font-size: 14px;
-    padding: 12px 14px;
+    font-size: 13px;
+    padding: 8px 12px;
   }
 
   .input-area {
-    padding: 8px 12px calc(12px + var(--safe-area-bottom));
-  }
-
-  .input-shell {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 10px;
-    gap: 10px;
+    padding: 8px 12px calc(8px + var(--safe-area-bottom));
   }
 
   .chat-input {
-    min-height: 44px;
     font-size: 16px; /* 防止iOS缩放 */
-  }
-
-  .send-button {
-    width: 100%;
-    height: 48px;
-    min-width: 0;
-  }
-}
-
-@media (max-width: 520px) {
-  .consult-header {
-    padding: 12px 12px 8px;
-  }
-
-  .consult-header h1 {
-    font-size: 18px;
-  }
-
-  .eyebrow {
-    font-size: 9px;
-  }
-
-  .message-list {
-    padding: 10px 12px 8px;
-  }
-
-  .message-content {
-    max-width: 90%;
-  }
-
-  .message-bubble {
-    font-size: 13px;
-    padding: 10px 12px;
-  }
-
-  .input-area {
-    padding: 6px 10px calc(10px + var(--safe-area-bottom));
   }
 }
 </style>
