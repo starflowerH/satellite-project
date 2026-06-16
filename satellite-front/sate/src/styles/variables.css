@@ -1,0 +1,150 @@
+/**
+ * 峡谷卫星 - 清新浅色全局CSS变量
+ * 色彩体系：柔和浅白、科技蓝点缀、清新现代
+ */
+
+:root {
+  /* ========== 浅色色彩体系 ========== */
+  /* 全局主背景色 */
+  --bg-primary: #F8FAFD;
+  /* 主体文字 - 深色 */
+  --text-primary: #1A202C;
+  /* 主体文字 - 辅助灰 */
+  --text-secondary: #64748B;
+  /* 点缀/交互色 - 科技蓝 */
+  --accent-cyan: #3B82F6;
+  /* 点缀/交互色 - 活力橙 */
+  --accent-red: #F97316;
+  /* 玻璃态背景色 */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  /* 玻璃态边框色 */
+  --glass-border: rgba(0, 0, 0, 0.06);
+
+  /* ========== 毛玻璃 (Glassmorphism) 参数 ========== */
+  /* backdrop-filter 模糊半径 */
+  --blur-amount: 16px;
+  /* 毛玻璃背景透明度 */
+  --glass-opacity: 0.72;
+
+  /* ========== 通用过渡/动画时间 ========== */
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+
+  /* ========== z-index 层级体系（从底到高） ========== */
+  /* video-bg: 视频背景层 - 最底层 */
+  --z-video-bg: 0;
+  /* gradient-overlay: 渐变遮罩层 - 视频之上，提高文字可读性 */
+  --z-gradient-overlay: 1;
+  /* navbar: 导航栏层 - 高于遮罩 */
+  --z-navbar: 100;
+  /* content: 内容层 - 最高层 */
+  --z-content: 10;
+
+  /* ========== 间距与尺寸 ========== */
+  --navbar-height: 64px;
+  --content-max-width: 1200px;
+  --border-radius: 16px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+
+  /* ========== 字体尺寸体系 ========== */
+  --font-size-h1: 28px;
+  --font-size-h2: 22px;
+  --font-size-h3: 18px;
+  --font-size-body: 15px;
+  --font-size-caption: 13px;
+  --font-size-small: 12px;
+
+  /* ========== 移动端通用间距 ========== */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* ========== 触摸目标最小尺寸 ========== */
+  --touch-target-min: 44px;
+
+  /* ========== z-index 补充 ========== */
+  --z-mobile-menu: 150;
+  --z-overlay: 140;
+}
+
+/* 去除 body 默认 margin */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* ========== 手机端全局优化（≤768px） ========== */
+@media (max-width: 768px) {
+  :root {
+    --navbar-height: 56px;
+    --border-radius: 12px;
+    --font-size-h1: 22px;
+    --font-size-h2: 18px;
+    --font-size-h3: 16px;
+    --font-size-body: 14px;
+    --font-size-caption: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+  }
+
+  /* 优化触摸目标大小 — 至少 44×44 */
+  button, a, input, select, textarea {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+  }
+
+  /* 优化输入框 */
+  input, select, textarea {
+    font-size: 16px !important; /* 防止iOS自动缩放 */
+  }
+
+  /* 优化滚动 */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 防止横向滚动 */
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+    position: relative;
+  }
+}
+
+/* ========== 手机竖屏专用优化（≤480px 竖屏） ========== */
+@media (max-width: 480px) and (orientation: portrait) {
+  :root {
+    --navbar-height: 52px;
+    --border-radius: 10px;
+    --font-size-h1: 20px;
+    --font-size-h2: 17px;
+    --font-size-h3: 15px;
+    --font-size-body: 14px;
+    --spacing-lg: 14px;
+    --spacing-xl: 20px;
+  }
+
+  /* 竖屏下按钮进一步放宽触摸区 */
+  button, a {
+    min-height: 48px;
+  }
+}
+
+/* ========== 暗色模式支持 ========== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* 暗色模式下颜色保持不变，因为本身就是暗色主题 */
+  }
+}
