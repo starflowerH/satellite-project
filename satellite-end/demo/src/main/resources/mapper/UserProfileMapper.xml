@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.mapper.UserProfileMapper">
+
+    <resultMap id="UserProfileResultMap" type="com.example.demo.pojo.UserProfile">
+        <id column="user_id" property="userId"/>
+        <result column="spicy_level" property="spicyLevel"/>
+        <result column="flavor_pref" property="flavorPref"/>
+        <result column="dietary_restrictions" property="dietaryRestrictions"/>
+        <result column="travel_pace" property="travelPace"/>
+        <result column="budget_per_meal" property="budgetPerMeal"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="findByUserId" resultMap="UserProfileResultMap">
+        SELECT * FROM t_user_profile WHERE user_id = #{userId} LIMIT 1
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO t_user_profile (
+            user_id, spicy_level, flavor_pref,
+            dietary_restrictions, travel_pace, budget_per_meal
+        ) VALUES (
+            #{userId}, #{spicyLevel}, #{flavorPref},
+            #{dietaryRestrictions}, #{travelPace}, #{budgetPerMeal}
+        )
+        ON DUPLICATE KEY UPDATE
+            spicy_level = VALUES(spicy_level),
+            flavor_pref = VALUES(flavor_pref),
+            dietary_restrictions = VALUES(dietary_restrictions),
+            travel_pace = VALUES(travel_pace),
+            budget_per_meal = VALUES(budget_per_meal),
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
+
+</mapper>

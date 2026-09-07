@@ -96,20 +96,21 @@ export const loginByEmailCode = (data: EmailCodeLoginDTO): Promise<Result<string
  * 重置密码参数
  */
 export interface ResetPasswordDTO {
-  phone: string
+  phone?: string
+  email?: string
   code: string
-  password: string
-}
-
-type ResetPasswordRequest = ResetPasswordDTO & {
+  password?: string
   newPassword?: string
 }
 
-export const resetPassword = (data: ResetPasswordRequest): Promise<Result> => {
-  const payload: ResetPasswordDTO = {
+export const resetPassword = (data: ResetPasswordDTO): Promise<Result> => {
+  const pwd = data.newPassword || data.password || ''
+  const payload = {
     phone: data.phone,
+    email: data.email,
     code: data.code,
-    password: data.password || data.newPassword || ''
+    password: pwd,
+    newPassword: pwd,
   }
   return request.post('/auth/reset-password', payload)
 }

@@ -9,7 +9,7 @@ export interface UserInfoVO {
   city: string
   phone: string
   email: string
-  mainHeroes: string[]
+  mainHeroes?: string[]
 }
 
 export interface UpdateUserDTO {

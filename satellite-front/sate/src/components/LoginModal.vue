@@ -1,9 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { authApi } from '@/api/auth'
-import { heroApi } from '@/api/hero'
-import type { HeroOption } from '@/api/hero'
-import MainHeroSelector from '@/components/MainHeroSelector.vue'
 import { useUserStore } from '@/store/user'
 
 const props = defineProps<{
@@ -17,11 +14,9 @@ const emit = defineEmits<{
 
 const userStore = useUserStore()
 
-type Mode = 'login' | 'register' | 'reset' | 'heroSetup'
+type Mode = 'login' | 'register' | 'reset'
 type LoginMethod = 'password' | 'phoneCode' | 'emailCode'
 type RegisterMethod = 'phone' | 'email'
-
-const HERO_LIMIT = 5
 
 const currentMode = ref<Mode>('login')
 const currentLoginMethod = ref<LoginMethod>('password')
@@ -43,13 +38,7 @@ const resetForm = ref({
   confirmPassword: '',
 })
 
-const heroOptions = ref<HeroOption[]>([])
-const selectedMainHeroes = ref<string[]>([])
-const heroKeyword = ref('')
-
 const isLoading = ref(false)
-const isHeroOptionsLoading = ref(false)
-const isSavingHeroes = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
 
@@ -57,17 +46,15 @@ const codeCountdown = ref(0)
 const codeTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
 const modalTitle = computed(() => {
-  if (currentMode.value === 'login') return '欢迎回来，召唤师'
-  if (currentMode.value === 'register') return '加入峡谷卫星'
-  if (currentMode.value === 'reset') return '重置密码'
-  return '选择你的本命英雄'
+  if (currentMode.value === 'login') return '欢迎使用灵境导览'
+  if (currentMode.value === 'register') return '加入灵境导览'
+  return '重置密码'
 })
 
 const modalSubtitle = computed(() => {
-  if (currentMode.value === 'login') return '登录峡谷卫星，继续你的探索'
-  if (currentMode.value === 'register') return '注册新账号，开启电竞之旅'
-  if (currentMode.value === 'reset') return '通过手机验证码重置密码'
-  return '从后端同步的英雄列表中选择 1-5 位，保存后即可进入系统'
+  if (currentMode.value === 'login') return '登录以同步您的出行画像与专属路线'
+  if (currentMode.value === 'register') return '注册新账号，开启专属衡阳文旅定制'
+  return '通过手机验证码重置密码'
 })
 
 const codeButtonText = computed(() =>
@@ -102,17 +89,7 @@ const isCodeButtonDisabled = computed(() => {
   return false
 })
 
-const submitButtonText = computed(() => {
-  if (currentMode.value === 'heroSetup') {
-    return isSavingHeroes.value ? '保存中...' : '保存本命英雄'
-  }
-
-  if (isLoading.value) {
-    if (currentMode.value === 'login') return '登录中...'
-    if (currentMode.value === 'register') return '注册中...'
-    return '重置中...'
-  }
-
+const submitButtonLabel = computed(() => {
   if (currentMode.value === 'login') return '登录'
   if (currentMode.value === 'register') return '注册'
   return '确认重置'
@@ -121,34 +98,6 @@ const submitButtonText = computed(() => {
 const clearMessages = () => {
   errorMsg.value = ''
   successMsg.value = ''
-}
-
-const normalizeHeroes = (heroes: string[]): string[] => {
-  const result: string[] = []
-
-  for (const hero of heroes.map((item) => item.trim()).filter(Boolean)) {
-    if (result.includes(hero)) continue
-    result.push(hero)
-    if (result.length >= HERO_LIMIT) break
-  }
-
-  return result
-}
-
-const resolveHeroIds = (heroNames: string[]): string[] => {
-  const uniqueNames = normalizeHeroes(heroNames)
-  const ids: string[] = []
-  const seen = new Set<string>()
-
-  for (const name of uniqueNames) {
-    const matched = heroOptions.value.find((hero) => hero.name === name)
-    const heroId = matched?.heroId?.trim()
-    if (!heroId || seen.has(heroId)) continue
-    seen.add(heroId)
-    ids.push(heroId)
-  }
-
-  return ids
 }
 
 const resetCodeTimer = () => {
@@ -193,53 +142,17 @@ const resetForms = () => {
     confirmPassword: '',
   }
 
-  selectedMainHeroes.value = []
-  heroOptions.value = []
-  heroKeyword.value = ''
   currentMode.value = 'login'
   currentLoginMethod.value = 'password'
   currentRegisterMethod.value = 'phone'
   isLoading.value = false
-  isSavingHeroes.value = false
-  isHeroOptionsLoading.value = false
-}
-
-const loadHeroOptions = async (keyword = heroKeyword.value) => {
-  if (isHeroOptionsLoading.value) return
-
-  isHeroOptionsLoading.value = true
-
-  try {
-    heroOptions.value = await heroApi.listHeroes({ keyword })
-  } catch (error) {
-    console.error('获取英雄列表异常:', error)
-    errorMsg.value = '英雄列表加载失败，请稍后重试'
-  } finally {
-    isHeroOptionsLoading.value = false
-  }
-}
-
-const handleHeroSearchChange = (keyword: string) => {
-  heroKeyword.value = keyword.trim()
-  void loadHeroOptions(heroKeyword.value)
-}
-
-const enterHeroSetup = async () => {
-  currentMode.value = 'heroSetup'
-  selectedMainHeroes.value = normalizeHeroes(userStore.userInfo.mainHeroes)
-  await loadHeroOptions()
 }
 
 watch(
   () => props.visible,
   (visible) => {
     if (!visible) return
-
     clearMessages()
-
-    if (userStore.isAuthenticated && userStore.needsHeroSelection) {
-      void enterHeroSetup()
-    }
   },
 )
 
@@ -301,14 +214,7 @@ const handleGetCode = async () => {
   }
 }
 
-const finishLoginFlow = async () => {
-  if (userStore.needsHeroSelection) {
-    successMsg.value = '登录成功，请先选择你的本命英雄'
-    errorMsg.value = ''
-    await enterHeroSetup()
-    return
-  }
-
+const finishLoginFlow = () => {
   successMsg.value = '登录成功'
   setTimeout(() => {
     emit('success')
@@ -485,55 +391,6 @@ const handleResetPassword = async () => {
   }
 }
 
-const handleHeroLimit = (limit: number) => {
-  errorMsg.value = `本命英雄最多选择 ${limit} 位`
-}
-
-const handleSaveMainHeroes = async () => {
-  clearMessages()
-
-  const heroes = normalizeHeroes(selectedMainHeroes.value)
-  selectedMainHeroes.value = heroes
-
-  if (!heroes.length) {
-    errorMsg.value = '请至少选择 1 位本命英雄'
-    return
-  }
-
-  if (heroes.length > HERO_LIMIT) {
-    errorMsg.value = `本命英雄最多选择 ${HERO_LIMIT} 位`
-    return
-  }
-
-  const heroIds = resolveHeroIds(heroes)
-  if (heroIds.length !== heroes.length) {
-    errorMsg.value = '部分英雄缺少有效 ID，请重新搜索后再保存'
-    return
-  }
-
-  isSavingHeroes.value = true
-
-  try {
-    const success = await userStore.saveMainHeroes(heroIds)
-
-    if (!success) {
-      errorMsg.value = '保存本命英雄失败，请稍后重试'
-      return
-    }
-
-    successMsg.value = '本命英雄保存成功'
-    setTimeout(() => {
-      emit('success')
-      handleClose()
-    }, 300)
-  } catch (error) {
-    errorMsg.value = '保存本命英雄异常，请稍后重试'
-    console.error(error)
-  } finally {
-    isSavingHeroes.value = false
-  }
-}
-
 const handleSubmit = () => {
   if (currentMode.value === 'login') {
     void handleLogin()
@@ -545,12 +402,7 @@ const handleSubmit = () => {
     return
   }
 
-  if (currentMode.value === 'reset') {
-    void handleResetPassword()
-    return
-  }
-
-  void handleSaveMainHeroes()
+  void handleResetPassword()
 }
 
 const switchLoginMethod = (method: LoginMethod) => {
@@ -595,14 +447,38 @@ const handleClose = () => {
   resetForms()
   emit('close')
 }
+
+const handleGlobalKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && props.visible) {
+    handleClose()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onBeforeUnmount(() => {
+  resetCodeTimer()
+  window.removeEventListener('keydown', handleGlobalKeydown)
+})
+
+watch(
+  () => props.visible,
+  (val) => {
+    if (!val) {
+      resetCodeTimer()
+    }
+  },
+)
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="props.visible" class="modal-overlay" @click.self="handleClose()">
-        <div class="modal-container" :class="{ 'modal-container--wide': currentMode === 'heroSetup' }">
-          <button class="close-btn" @click="handleClose()">×</button>
+        <div class="modal-container">
+          <button class="close-btn touch-target" type="button" aria-label="关闭" @click="handleClose()">×</button>
 
           <div class="modal-header">
             <div class="logo-icon">🛰️</div>
@@ -861,35 +737,17 @@ const handleClose = () => {
               </div>
             </template>
 
-            <template v-else>
-              <div class="hero-setup-panel">
-                <div class="hero-setup-head">
-                  <span class="hero-setup-badge">Hero Sync Online</span>
-                  <h3 class="hero-setup-title">绑定你的本命英雄阵容</h3>
-                  <p class="hero-setup-desc">
-                    英雄名称与职业信息由后端统一下发。请至少选择 1 位，最多选择 5 位，后续可在个人资料中继续调整。
-                  </p>
-                </div>
-
-                <MainHeroSelector
-                  v-model="selectedMainHeroes"
-                  :heroes="heroOptions"
-                  :loading="isHeroOptionsLoading"
-                  :limit="HERO_LIMIT"
-                  @limit-exceeded="handleHeroLimit"
-                  @search-change="handleHeroSearchChange"
-                />
-              </div>
-            </template>
-
             <div v-if="errorMsg" class="error-message">{{ errorMsg }}</div>
             <div v-if="successMsg" class="success-message">{{ successMsg }}</div>
 
-            <button type="submit" class="login-btn" :disabled="isLoading || isSavingHeroes">
-              {{ submitButtonText }}
+            <button type="submit" class="login-btn touch-target" :disabled="isLoading">
+              <span v-if="isLoading" class="btn-spinner" aria-hidden="true">
+                <svg viewBox="0 0 24 24" class="spinner-icon"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 31.4" /></svg>
+              </span>
+              <span>{{ submitButtonLabel }}</span>
             </button>
 
-            <div v-if="currentMode !== 'heroSetup'" class="form-links">
+            <div class="form-links">
               <template v-if="currentMode === 'login'">
                 <button type="button" class="link-btn" @click="switchToRegister">
                   还没有账号？立即注册
@@ -934,10 +792,10 @@ const handleClose = () => {
   width: min(460px, calc(100vw - 32px));
   padding: 48px 40px;
   border-radius: 24px;
-  background: rgba(10, 13, 20, 0.85);
+  background: var(--surface-modal, #0B1120);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default, rgba(148, 163, 184, 0.24));
   box-shadow:
     0 25px 50px rgba(0, 0, 0, 0.5),
     inset 0 1px 1px rgba(255, 255, 255, 0.05);
@@ -952,8 +810,13 @@ const handleClose = () => {
   position: absolute;
   top: 16px;
   right: 20px;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 50%;
@@ -965,8 +828,8 @@ const handleClose = () => {
 }
 
 .close-btn:hover {
-  background: rgba(255, 51, 102, 0.2);
-  color: var(--accent-red);
+  background: var(--color-danger-bg, rgba(239, 68, 68, 0.2));
+  color: var(--color-danger, #EF4444);
 }
 
 .modal-header {
@@ -1015,9 +878,9 @@ const handleClose = () => {
 }
 
 .tab-btn.active {
-  background: var(--accent-cyan);
-  color: var(--bg-primary);
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
+  background: var(--color-primary, #06B6D4);
+  color: var(--text-inverse, #020617);
+  box-shadow: 0 0 20px var(--color-primary-glow, rgba(6, 182, 212, 0.35));
 }
 
 .login-form {
@@ -1041,21 +904,21 @@ const handleClose = () => {
 .input-field {
   padding: 14px 18px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-default, rgba(148, 163, 184, 0.24));
+  background: var(--surface-overlay, rgba(30, 41, 59, 0.7));
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 16px;
   transition: all var(--transition-normal);
 }
 
 .input-field::placeholder {
-  color: rgba(139, 161, 184, 0.5);
+  color: var(--text-muted, rgba(148, 163, 184, 0.6));
 }
 
 .input-field:focus {
   outline: none;
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
 }
 
 .code-input-group {
@@ -1070,29 +933,33 @@ const handleClose = () => {
 
 .code-btn {
   padding: 14px 20px;
+  min-height: 44px;
   border-radius: 12px;
-  border: 1px solid var(--accent-cyan);
+  border: 1px solid var(--color-primary);
   background: transparent;
-  color: var(--accent-cyan);
+  color: var(--color-primary);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-normal);
   white-space: nowrap;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .code-btn:hover:not(:disabled) {
-  background: var(--accent-cyan);
-  color: var(--bg-primary);
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+  background: var(--color-primary);
+  color: var(--text-inverse, #020617);
+  box-shadow: 0 0 16px var(--color-primary-glow);
 }
 
 .code-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  border-color: var(--text-secondary);
-  color: var(--text-secondary);
+  border-color: var(--text-muted);
+  color: var(--text-muted);
 }
 
 .hero-setup-panel {
@@ -1103,8 +970,8 @@ const handleClose = () => {
 .hero-setup-head {
   padding: 18px 18px 14px;
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(7, 17, 31, 0.88), rgba(10, 20, 36, 0.78));
-  border: 1px solid rgba(0, 229, 255, 0.18);
+  background: var(--surface-overlay, rgba(15, 23, 42, 0.88));
+  border: 1px solid var(--border-subtle);
 }
 
 .hero-setup-badge {
@@ -1113,8 +980,8 @@ const handleClose = () => {
   min-height: 28px;
   padding: 0 12px;
   border-radius: 999px;
-  background: rgba(0, 229, 255, 0.12);
-  color: #9ff7ff;
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1123,22 +990,22 @@ const handleClose = () => {
 .hero-setup-title {
   margin: 14px 0 8px;
   font-size: 22px;
-  color: #eef7ff;
+  color: var(--text-primary);
 }
 
 .hero-setup-desc {
   margin: 0;
   line-height: 1.7;
-  color: rgba(180, 205, 228, 0.82);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
 .error-message {
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(255, 51, 102, 0.1);
-  border: 1px solid rgba(255, 51, 102, 0.3);
-  color: var(--accent-red);
+  background: var(--color-danger-bg, rgba(239, 68, 68, 0.12));
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--color-danger, #EF4444);
   font-size: 13px;
   text-align: center;
 }
@@ -1146,9 +1013,9 @@ const handleClose = () => {
 .success-message {
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(0, 229, 255, 0.1);
-  border: 1px solid rgba(0, 229, 255, 0.3);
-  color: var(--accent-cyan);
+  background: var(--color-primary-muted, rgba(6, 182, 212, 0.15));
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: var(--color-primary, #06B6D4);
   font-size: 13px;
   text-align: center;
 }
@@ -1156,19 +1023,26 @@ const handleClose = () => {
 .login-btn {
   margin-top: 8px;
   padding: 16px;
+  min-height: 48px;
   border-radius: 12px;
   border: none;
-  background: linear-gradient(135deg, var(--accent-cyan), #00b8d4);
-  color: var(--bg-primary);
+  background: var(--color-primary, #06B6D4);
+  color: var(--text-inverse, #020617);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 0 16px var(--color-primary-glow);
 }
 
 .login-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(0, 229, 255, 0.3);
+  background: var(--color-primary-hover, #22D3EE);
+  box-shadow: 0 4px 24px var(--color-primary-glow);
 }
 
 .login-btn:disabled {
@@ -1308,14 +1182,6 @@ const handleClose = () => {
     flex-direction: column;
     align-items: center;
     gap: 8px;
-  }
-
-  .hero-setup-title {
-    font-size: 18px;
-  }
-
-  .hero-setup-desc {
-    font-size: 13px;
   }
 }
 

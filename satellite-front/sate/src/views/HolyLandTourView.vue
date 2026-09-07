@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useHolyTourStore } from '@/store/holyTour'
 import { useUserStore } from '@/store/user'
@@ -120,6 +120,9 @@ const locatedPoint = ref<LngLatTuple | null>(null)
 const plannedStart = ref('')
 const plannedEnd = ref('')
 const autoPlannedRouteSignature = ref('')
+const isStoryCollapsed = ref(false)
+const activeMobileTab = ref<'planner' | 'spots' | 'story'>('planner')
+const isMobileSheetExpanded = ref(false)
 
 let AMap: AMapModule | null = null
 let mapInstance: any = null
@@ -192,7 +195,7 @@ const dataSourceLabel = computed(() => (activeRoute.value ? '智能体' : '本�
 const smartFallbackMessage = computed(() => (activeRoute.value ? '' : holyTourStore.error))
 const activeRouteThemeColor = computed(() => activeRoute.value?.heroThemeColor || DEFAULT_THEME_COLOR)
 const activeRouteTitle = computed(() => activeRoute.value?.routeName || `${destinationCityForSpots.value || '当前城市'}推荐景点`)
-const activeHeroName = computed(() => activeRoute.value?.heroName || userStore.userInfo.mainHeroes[0] || '巡游英雄')
+const activeHeroName = computed(() => activeRoute.value?.heroName || userStore.userInfo.mainHeroes?.[0] || '巡游英雄')
 const activeStorySpot = computed(() => selectedDestinationSpot.value || recommendedSpots.value[0] || null)
 const selectedSpotLabel = computed(() => selectedDestinationSpot.value?.name || '-')
 const locatedStartLabel = computed(() => {
@@ -638,6 +641,8 @@ const chooseSpotAsDestination = (spot: RecommendedSpot) => {
   errorMessage.value = ''
   void previewRecommendedSpot(spot)
 
+  activeMobileTab.value = 'planner'
+
   if (startInput.value.trim() && !isPlanning.value) {
     void planStartToEnd()
   }
@@ -869,10 +874,50 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="travel-view">
+  <div class="travel-view" :class="{ 'mobile-sheet-open': isMobileSheetExpanded }">
     <div ref="mapContainerRef" class="map-layer" />
 
-    <section class="planner-panel" :style="{ '--route-theme-color': activeRouteThemeColor }">
+    <!-- 移动端底栏抽屉切换导航条 (仅在 <= 768px 显示) -->
+    <div class="mobile-sheet-controls">
+      <div class="sheet-drag-handle" @click="isMobileSheetExpanded = !isMobileSheetExpanded">
+        <span class="drag-bar" />
+        <span class="sheet-toggle-label">{{ isMobileSheetExpanded ? '收起浮层 ▼' : '展开路线与景点 ▲' }}</span>
+      </div>
+      <div class="mobile-tab-bar">
+        <button
+          type="button"
+          class="mobile-tab-btn"
+          :class="{ active: activeMobileTab === 'planner' }"
+          @click="activeMobileTab = 'planner'"
+        >
+          🗺️ 规划路线
+        </button>
+        <button
+          type="button"
+          class="mobile-tab-btn"
+          :class="{ active: activeMobileTab === 'spots' }"
+          @click="activeMobileTab = 'spots'"
+        >
+          📍 景点打卡 ({{ recommendedSpots.length }})
+        </button>
+        <button
+          v-if="activeStorySpot"
+          type="button"
+          class="mobile-tab-btn"
+          :class="{ active: activeMobileTab === 'story' }"
+          @click="activeMobileTab = 'story'"
+        >
+          ⚔️ 英雄故事
+        </button>
+      </div>
+    </div>
+
+    <!-- 路线规划面板 -->
+    <section
+      class="planner-panel"
+      :class="{ 'mobile-tab-hidden': activeMobileTab !== 'planner' }"
+      :style="{ '--route-theme-color': activeRouteThemeColor }"
+    >
       <div class="panel-head">
         <div>
           <p class="panel-tag">圣地巡游 · 路线规划</p>
@@ -882,41 +927,46 @@ onBeforeUnmount(() => {
       </div>
       <p class="panel-desc">登录后会自动定位“圣地巡游”智能体并尝试拉取城市路线 JSON。推荐区优先显示智能体结果，失败时自动回退本地数据。</p>
 
-      <div class="field-block">
-        <div class="field-label-row">
-          <label for="start">起点</label>
-          <span v-if="locatedStartLabel" class="located-pill">已定位：{{ locatedStartLabel }}</span>
+      <form class="planner-form" @submit.prevent="planStartToEnd">
+        <div class="field-block">
+          <div class="field-label-row">
+            <label for="start">起点</label>
+            <span v-if="locatedStartLabel" class="located-pill">已定位：{{ locatedStartLabel }}</span>
+          </div>
+          <div class="input-row">
+            <input id="start" v-model="startInput" type="text" placeholder="例如：杭州" />
+            <button type="button" class="ghost-btn touch-target" @click="fillStartWithLocatedCity">用定位点</button>
+          </div>
         </div>
-        <div class="input-row">
-          <input id="start" v-model="startInput" type="text" placeholder="例如：杭州" />
-          <button type="button" class="ghost-btn" @click="fillStartWithLocatedCity">用定位点</button>
+
+        <div class="field-block">
+          <label for="end">终点</label>
+          <input id="end" v-model="endInput" type="text" placeholder="例如：南京 / 西安市大雁塔" />
         </div>
-      </div>
 
-      <div class="field-block">
-        <label for="end">终点</label>
-        <input id="end" v-model="endInput" type="text" placeholder="例如：南京 / 西安市大雁塔" />
-      </div>
-
-      <div class="field-block">
-        <label>快速勾选地点（最多 2 个）</label>
-        <div class="city-grid">
-          <button
-            v-for="city in QUICK_CITIES"
-            :key="city"
-            type="button"
-            class="city-chip"
-            :class="{ 'city-chip--active': selectedCities.includes(city) }"
-            @click="toggleSelectCity(city)"
-          >
-            {{ city }}
-          </button>
+        <div class="field-block">
+          <label>快速勾选地点（最多 2 个）</label>
+          <div class="city-grid">
+            <button
+              v-for="city in QUICK_CITIES"
+              :key="city"
+              type="button"
+              class="city-chip touch-target"
+              :class="{ 'city-chip--active': selectedCities.includes(city) }"
+              @click="toggleSelectCity(city)"
+            >
+              {{ city }}
+            </button>
+          </div>
         </div>
-      </div>
 
-      <button type="button" class="primary-btn" :disabled="!canPlanRoute" @click="planStartToEnd">
-        {{ isPlanning ? '规划中...' : '展示起点到终点' }}
-      </button>
+        <button type="submit" class="primary-btn touch-target" :disabled="!canPlanRoute || isPlanning">
+          <span v-if="isPlanning" class="btn-spinner" aria-hidden="true">
+            <svg viewBox="0 0 24 24" class="spinner-icon"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 31.4" /></svg>
+          </span>
+          <span class="btn-text">规划路线</span>
+        </button>
+      </form>
 
       <p v-if="errorMessage" class="feedback feedback--error">{{ errorMessage }}</p>
       <p v-if="smartFallbackMessage" class="feedback feedback--warn">{{ smartFallbackMessage }}</p>
@@ -930,24 +980,47 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="activeStorySpot" class="hero-story-card" :style="{ '--route-theme-color': activeRouteThemeColor }">
+    <!-- 英雄坐标注记卡 -->
+    <section
+      v-if="activeStorySpot"
+      class="hero-story-card"
+      :class="{ 'mobile-tab-hidden': activeMobileTab !== 'story', 'is-collapsed': isStoryCollapsed }"
+      :style="{ '--route-theme-color': activeRouteThemeColor }"
+    >
       <div class="hero-story-head">
         <div>
           <p class="panel-tag">英雄坐标注记</p>
           <h3>{{ activeHeroName }}</h3>
         </div>
-        <span class="source-pill">本地定位：{{ currentCityLabel }}</span>
+        <div class="hero-story-actions">
+          <span class="source-pill">本地定位：{{ currentCityLabel }}</span>
+          <button
+            type="button"
+            class="story-toggle-btn"
+            :aria-label="isStoryCollapsed ? '展开注记' : '收起注记'"
+            @click="isStoryCollapsed = !isStoryCollapsed"
+          >
+            {{ isStoryCollapsed ? '展开 ▼' : '收起 ▲' }}
+          </button>
+        </div>
       </div>
-      <p class="hero-story-place">
-        {{ activeStorySpot.name }}
-        <span v-if="activeStorySpot.province || activeStorySpot.city">
-          · {{ [activeStorySpot.province, activeStorySpot.city].filter(Boolean).join(' / ') }}
-        </span>
-      </p>
-      <p class="hero-story-text">{{ activeStorySpot.story || activeStorySpot.summary }}</p>
+      <div v-show="!isStoryCollapsed" class="hero-story-body">
+        <p class="hero-story-place">
+          {{ activeStorySpot.name }}
+          <span v-if="activeStorySpot.province || activeStorySpot.city">
+            · {{ [activeStorySpot.province, activeStorySpot.city].filter(Boolean).join(' / ') }}
+          </span>
+        </p>
+        <p class="hero-story-text">{{ activeStorySpot.story || activeStorySpot.summary }}</p>
+      </div>
     </section>
 
-    <aside class="spots-panel" :style="{ '--route-theme-color': activeRouteThemeColor }">
+    <!-- 圣地巡游推荐区 -->
+    <aside
+      class="spots-panel"
+      :class="{ 'mobile-tab-hidden': activeMobileTab !== 'spots' }"
+      :style="{ '--route-theme-color': activeRouteThemeColor }"
+    >
       <div class="spots-head">
         <div>
           <p class="panel-tag">圣地巡游推荐区</p>
@@ -1004,9 +1077,9 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 4;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  background: var(--surface-card-glass, rgba(15, 23, 42, 0.88));
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-lg);
   backdrop-filter: blur(14px);
 }
 
@@ -1014,6 +1087,8 @@ onBeforeUnmount(() => {
   top: 20px;
   left: 20px;
   width: min(440px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   padding: 18px;
 }
 
@@ -1033,6 +1108,11 @@ onBeforeUnmount(() => {
   z-index: 4;
   width: min(420px, calc(100vw - 40px));
   padding: 16px 18px;
+  transition: all var(--transition-normal);
+}
+
+.hero-story-card.is-collapsed {
+  padding-bottom: 12px;
 }
 
 .hero-story-head {
@@ -1042,10 +1122,56 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.hero-story-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.story-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--border-radius-sm, 8px);
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.story-toggle-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+@media (max-height: 800px) and (min-width: 769px) {
+  .planner-panel {
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+
+  .hero-story-card {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 20px;
+    width: min(460px, calc(100vw - 40px));
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 25;
+  }
+}
+
 .hero-story-head h3 {
   margin: 0;
-  color: var(--accent-cyan);
-  font-size: 22px;
+  color: var(--color-primary);
+  font-size: 20px;
 }
 
 .hero-story-place {
@@ -1079,7 +1205,7 @@ onBeforeUnmount(() => {
 
 .panel-tag {
   margin: 0 0 8px;
-  color: var(--accent-cyan);
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1102,12 +1228,12 @@ onBeforeUnmount(() => {
 
 .source-pill {
   flex-shrink: 0;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
   font-size: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--border-subtle);
 }
 
 .panel-desc,
@@ -1142,11 +1268,11 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid var(--border-subtle);
   border-radius: 999px;
   padding: 4px 9px;
-  background: rgba(59, 130, 246, 0.06);
-  color: var(--accent-cyan);
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
   font-size: 12px;
 }
 
@@ -1158,19 +1284,20 @@ onBeforeUnmount(() => {
 
 input {
   width: 100%;
-  height: 40px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  height: 44px;
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(15, 23, 42, 0.75);
   color: var(--text-primary);
   padding: 0 12px;
-  font-size: 14px;
+  font-size: 16px;
+  box-sizing: border-box;
 }
 
 input:focus {
   outline: none;
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
 }
 
 .city-grid {
@@ -1180,29 +1307,35 @@ input:focus {
 }
 
 .city-chip {
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
-  padding: 6px 12px;
+  padding: 8px 14px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .city-chip:hover {
-  border-color: rgba(59, 130, 246, 0.2);
-  background: rgba(59, 130, 246, 0.04);
+  border-color: var(--color-primary);
+  background: var(--color-primary-muted);
+  color: var(--text-primary);
 }
 
 .city-chip--active {
-  border-color: var(--accent-cyan);
-  color: var(--accent-cyan);
-  background: rgba(59, 130, 246, 0.08);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
 }
 
 .primary-btn,
 .ghost-btn {
-  height: 40px;
+  height: 44px;
+  min-height: 44px;
   border-radius: 10px;
   cursor: pointer;
 }
@@ -1210,10 +1343,18 @@ input:focus {
 .primary-btn {
   width: 100%;
   border: none;
-  background: linear-gradient(135deg, var(--accent-cyan), #60A5FA);
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--text-inverse);
   font-weight: 700;
-  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 16px var(--color-primary-glow);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.primary-btn:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  box-shadow: 0 0 20px var(--color-primary-glow);
 }
 
 .primary-btn:disabled {
@@ -1222,15 +1363,22 @@ input:focus {
 }
 
 .ghost-btn {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
-  padding: 0 12px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ghost-btn:hover {
-  border-color: rgba(59, 130, 246, 0.2);
-  color: var(--accent-cyan);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.mobile-sheet-controls {
+  display: none;
 }
 
 .feedback {
@@ -1239,19 +1387,19 @@ input:focus {
 }
 
 .feedback--error {
-  color: #DC2626;
+  color: var(--color-danger, #DC2626);
 }
 
 .feedback--warn {
-  color: #D97706;
+  color: var(--color-warning, #D97706);
 }
 
 .status-box {
   margin-top: 14px;
   padding: 12px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--surface-card, rgba(15, 23, 42, 0.6));
+  border: 1px solid var(--border-subtle);
 }
 
 .status-box p {
@@ -1275,9 +1423,9 @@ input:focus {
   grid-template-columns: 92px 1fr;
   gap: 12px;
   text-align: left;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--border-subtle);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--surface-card-glass, rgba(15, 23, 42, 0.8));
   color: var(--text-primary);
   padding: 10px;
   cursor: pointer;
@@ -1285,8 +1433,8 @@ input:focus {
 }
 
 .spot-item:hover {
-  border-color: rgba(59, 130, 246, 0.2);
-  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 16px var(--color-primary-glow);
 }
 
 .spot-thumb {
@@ -1294,7 +1442,7 @@ input:focus {
   height: 92px;
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.3);
 }
 
 .spot-thumb img,
@@ -1313,8 +1461,8 @@ input:focus {
   align-items: center;
   justify-content: center;
   padding: 8px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(139, 92, 246, 0.06));
-  color: var(--text-secondary);
+  background: var(--surface-overlay, rgba(30, 41, 59, 0.6));
+  color: var(--text-muted);
   font-size: 12px;
   text-align: center;
 }
@@ -1326,6 +1474,7 @@ input:focus {
 
 .spot-meta strong {
   font-size: 15px;
+  color: var(--text-primary);
 }
 
 .spot-meta span {
@@ -1335,13 +1484,14 @@ input:focus {
 }
 
 .spot-city {
-  color: var(--accent-cyan);
+  color: var(--color-primary, #06B6D4);
+  font-weight: 600;
 }
 
 .spots-empty {
   font-size: 13px;
   color: var(--text-secondary);
-  border: 1px dashed rgba(0, 0, 0, 0.1);
+  border: 1px dashed var(--border-subtle);
   border-radius: 12px;
   padding: 12px;
 }
@@ -1353,7 +1503,7 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(7, 11, 20, 0.85);
   color: var(--text-primary);
   font-size: 18px;
   backdrop-filter: blur(4px);
@@ -1380,70 +1530,123 @@ input:focus {
 /* ========== 移动端适配（≤768px） ========== */
 @media (max-width: 768px) {
   .travel-view {
-    height: auto;
-    min-height: calc(100vh - var(--navbar-height));
+    position: relative;
+    height: calc(100vh - var(--navbar-height));
+    overflow: hidden;
   }
 
   .map-layer {
-    position: relative;
-    height: 50vh;
-    min-height: 300px;
-  }
-
-  .planner-panel {
-    position: relative;
-    left: 0;
-    right: 0;
-    top: 0;
+    position: absolute;
+    inset: 0;
     width: 100%;
-    margin: 0;
-    border-radius: 0 0 16px 16px;
-    padding: 16px;
+    height: 100%;
+    z-index: 1;
   }
 
-  .input-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .spots-panel {
-    position: relative;
-    left: 0;
-    right: 0;
-    top: 0;
-    width: 100%;
-    max-height: none;
-    margin: 12px 0 0;
-    border-radius: 16px;
-    padding: 14px;
-  }
-
-  .hero-story-card {
-    position: relative;
+  /* 移动端 Bottom Sheet 控制区 */
+  .mobile-sheet-controls {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
-    width: 100%;
-    max-height: none;
-    margin: 12px 0 0;
-    border-radius: 16px;
-    padding: 14px 16px;
+    z-index: 45;
+    background: var(--surface-card, #0F172A);
+    border-top: 1px solid var(--border-default);
+    padding-bottom: var(--safe-area-bottom);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
   }
 
-  .hero-story-head {
+  .sheet-drag-handle {
+    display: flex;
     flex-direction: column;
+    align-items: center;
+    padding: 8px 16px 4px;
+    cursor: pointer;
+  }
+
+  .drag-bar {
+    width: 36px;
+    height: 4px;
+    background: var(--border-default);
+    border-radius: 2px;
+    margin-bottom: 4px;
+  }
+
+  .sheet-toggle-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .mobile-tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .mobile-tab-btn {
+    flex: 1;
+    min-height: 44px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 4px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .mobile-tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+
+  /* 移动端面板作为浮层抽屉底板 */
+  .planner-panel,
+  .spots-panel,
+  .hero-story-card {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: calc(96px + var(--safe-area-bottom));
+    width: 100%;
+    max-height: 42vh;
+    overflow-y: auto;
+    z-index: 40;
+    border-radius: 16px 16px 0 0;
+    background: var(--surface-modal, #0F172A);
+    border: 1px solid var(--border-subtle);
+    border-bottom: none;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
+    padding: 16px;
+    box-sizing: border-box;
+    transition: max-height 0.3s ease;
+  }
+
+  .travel-view.mobile-sheet-open .planner-panel,
+  .travel-view.mobile-sheet-open .spots-panel,
+  .travel-view.mobile-sheet-open .hero-story-card {
+    max-height: 75vh;
+  }
+
+  .mobile-tab-hidden {
+    display: none !important;
+  }
+
+  .input-row {
+    grid-template-columns: 1fr auto;
     gap: 8px;
   }
 
-  .spot-item {
-    grid-template-columns: 80px 1fr;
-    gap: 10px;
-    padding: 10px;
-  }
-
-  .spot-thumb {
-    width: 80px;
-    height: 80px;
+  input {
+    font-size: 16px !important;
+    height: 44px;
   }
 
   .city-grid {
@@ -1453,13 +1656,29 @@ input:focus {
   }
 
   .city-chip {
-    padding: 8px 6px;
+    padding: 8px 4px;
     font-size: 12px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
   }
 
+  .spot-item {
+    grid-template-columns: 80px 1fr;
+    gap: 10px;
+    padding: 10px;
+    min-height: 52px;
+  }
+
+  .spot-thumb {
+    width: 80px;
+    height: 80px;
+  }
+
   .primary-btn {
-    min-height: 48px;
+    min-height: 44px;
   }
 
   .ghost-btn {
@@ -1477,12 +1696,9 @@ input:focus {
 
 /* ========== 手机竖屏（≤520px） ========== */
 @media (max-width: 520px) {
-  .map-layer {
-    height: 40vh;
-    min-height: 250px;
-  }
-
-  .planner-panel {
+  .planner-panel,
+  .spots-panel,
+  .hero-story-card {
     padding: 14px 12px;
   }
 
@@ -1494,21 +1710,18 @@ input:focus {
     font-size: 11px;
   }
 
-  .spots-panel {
-    padding: 12px;
-  }
-
   .spots-head h3 {
     font-size: 16px;
   }
 
   .spot-item {
-    grid-template-columns: 1fr;
+    grid-template-columns: 70px 1fr;
+    gap: 8px;
   }
 
   .spot-thumb {
-    width: 100%;
-    height: 120px;
+    width: 70px;
+    height: 70px;
   }
 
   .city-grid {
@@ -1516,8 +1729,8 @@ input:focus {
   }
 
   .city-chip {
-    padding: 10px 8px;
-    font-size: 13px;
+    padding: 8px 4px;
+    font-size: 12px;
   }
 
   .loading-mask {
@@ -1527,11 +1740,6 @@ input:focus {
 
 /* ========== 超小屏幕（≤380px） ========== */
 @media (max-width: 380px) {
-  .map-layer {
-    height: 35vh;
-    min-height: 200px;
-  }
-
   .city-grid {
     grid-template-columns: repeat(2, 1fr);
   }

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.mapper.RouteItemMapper">
+
+    <resultMap id="RouteItemResultMap" type="com.example.demo.pojo.RouteItem">
+        <id column="id" property="id"/>
+        <result column="plan_id" property="planId"/>
+        <result column="item_order" property="itemOrder"/>
+        <result column="item_type" property="itemType"/>
+        <result column="target_id" property="targetId"/>
+        <result column="name" property="name"/>
+        <result column="longitude" property="longitude"/>
+        <result column="latitude" property="latitude"/>
+        <result column="arrive_time" property="arriveTime"/>
+        <result column="stay_minutes" property="stayMinutes"/>
+        <result column="recommend_reason" property="recommendReason"/>
+        <result column="recommended_dishes" property="recommendedDishes"/>
+        <result column="transport_to_next_minutes" property="transportToNextMinutes"/>
+        <result column="transport_to_next_distance" property="transportToNextDistance"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO t_route_item (
+            plan_id, item_order, item_type, target_id, name,
+            longitude, latitude, arrive_time, stay_minutes,
+            recommend_reason, recommended_dishes,
+            transport_to_next_minutes, transport_to_next_distance
+        ) VALUES (
+            #{planId}, #{itemOrder}, #{itemType}, #{targetId}, #{name},
+            #{longitude}, #{latitude}, #{arriveTime}, #{stayMinutes},
+            #{recommendReason}, #{recommendedDishes},
+            #{transportToNextMinutes}, #{transportToNextDistance}
+        )
+    </insert>
+
+    <insert id="batchInsert">
+        INSERT INTO t_route_item (
+            plan_id, item_order, item_type, target_id, name,
+            longitude, latitude, arrive_time, stay_minutes,
+            recommend_reason, recommended_dishes,
+            transport_to_next_minutes, transport_to_next_distance
+        ) VALUES
+        <foreach collection="items" item="item" separator=",">
+            (
+                #{item.planId}, #{item.itemOrder}, #{item.itemType}, #{item.targetId}, #{item.name},
+                #{item.longitude}, #{item.latitude}, #{item.arriveTime}, #{item.stayMinutes},
+                #{item.recommendReason}, #{item.recommendedDishes},
+                #{item.transportToNextMinutes}, #{item.transportToNextDistance}
+            )
+        </foreach>
+    </insert>
+
+    <select id="listByPlanId" resultMap="RouteItemResultMap">
+        SELECT * FROM t_route_item
+        WHERE plan_id = #{planId}
+        ORDER BY item_order ASC
+    </select>
+
+    <delete id="deleteByPlanId">
+        DELETE FROM t_route_item WHERE plan_id = #{planId}
+    </delete>
+
+</mapper>

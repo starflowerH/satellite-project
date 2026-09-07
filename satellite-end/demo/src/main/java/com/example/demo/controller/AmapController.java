@@ -14,7 +14,7 @@ import java.util.Map;
  * 将高德地图Key隐藏在后端，前端通过此代理调用高德API
  */
 @RestController
-@RequestMapping("/amap")
+@RequestMapping({"/amap", "/api/amap"})
 @RequiredArgsConstructor
 public class AmapController {
 

@@ -40,7 +40,7 @@ const handleClose = () => {
     </div>
 
     <!-- 关闭按钮 -->
-    <button class="close-btn" @click="handleClose" aria-label="关闭">
+    <button class="close-btn touch-target" @click="handleClose" aria-label="关闭每日推荐">
       ×
     </button>
 
@@ -97,13 +97,13 @@ const handleClose = () => {
   position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 16px;
+  border-radius: var(--border-radius);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--surface-card-glass, rgba(15, 23, 42, 0.85));
+  backdrop-filter: blur(var(--blur-amount));
+  -webkit-backdrop-filter: blur(var(--blur-amount));
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-subtle);
 }
 
 /* ========== 背景层 ========== */
@@ -120,6 +120,7 @@ const handleClose = () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0.35;
   transition: transform 0.5s ease;
 }
 
@@ -135,9 +136,9 @@ const handleClose = () => {
   height: 100%;
   background: linear-gradient(
     to bottom,
-    rgba(255, 255, 255, 0.2) 0%,
-    rgba(255, 255, 255, 0.5) 40%,
-    rgba(255, 255, 255, 0.92) 100%
+    rgba(15, 23, 42, 0.4) 0%,
+    rgba(15, 23, 42, 0.75) 50%,
+    rgba(15, 23, 42, 0.95) 100%
   );
 }
 
@@ -146,22 +147,25 @@ const handleClose = () => {
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: rgba(0, 0, 0, 0.06);
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.6);
   border-radius: 50%;
-  color: rgba(0, 0, 0, 0.4);
-  font-size: 24px;
-  line-height: 1;
+  color: var(--text-secondary);
+  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   z-index: 10;
-  transition: all 0.3s ease;
+  transition: all var(--transition-fast);
 }
 
 .close-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #EF4444;
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 
 /* ========== 内容展示区 ========== */
@@ -192,7 +196,7 @@ const handleClose = () => {
 .date-day {
   font-size: 72px;
   font-weight: 900;
-  color: var(--accent-cyan);
+  color: var(--color-primary, #06B6D4);
   letter-spacing: -4px;
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
@@ -206,8 +210,8 @@ const handleClose = () => {
 .date-y-m,
 .date-weekday {
   font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary, #F8FAFC);
 }
 
 /* 节气标签 */
@@ -217,19 +221,19 @@ const handleClose = () => {
   gap: 8px;
   padding: 8px 16px;
   border-radius: 20px;
-  background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: var(--color-primary-muted, rgba(6, 182, 212, 0.15));
+  border: 1px solid var(--border-default, rgba(148, 163, 184, 0.24));
 }
 
 .solar-term-icon {
   font-size: 16px;
-  color: var(--accent-cyan);
+  color: var(--color-primary, #06B6D4);
 }
 
 .solar-term-text {
   font-size: 15px;
   font-weight: 600;
-  color: var(--accent-cyan);
+  color: var(--color-primary, #06B6D4);
   letter-spacing: 2px;
 }
 
@@ -248,7 +252,8 @@ const handleClose = () => {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  border: 2px solid rgba(59, 130, 246, 0.3);
+  border: 2px solid var(--color-primary, #06B6D4);
+  box-shadow: 0 0 16px var(--color-primary-glow, rgba(6, 182, 212, 0.35));
   object-fit: cover;
 }
 
@@ -269,7 +274,7 @@ const handleClose = () => {
 
 .hero-title {
   font-size: 13px;
-  color: var(--accent-cyan);
+  color: var(--color-primary, #06B6D4);
   margin: 0;
   letter-spacing: 3px;
 }
@@ -282,6 +287,7 @@ const handleClose = () => {
   right: 28px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   z-index: 2;
 }
@@ -292,17 +298,20 @@ const handleClose = () => {
   background: linear-gradient(
     to right,
     transparent,
-    rgba(59, 130, 246, 0.2),
+    rgba(6, 182, 212, 0.35),
     transparent
   );
 }
 
 .quote-text {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.5;
+  text-align: center;
+  max-width: 60ch;
 }
 
 /* ========== AI 标签 ========== */
@@ -315,7 +324,7 @@ const handleClose = () => {
   gap: 6px;
   padding: 6px 12px;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent-cyan), #60A5FA);
+  background: linear-gradient(135deg, var(--color-primary, #06B6D4), var(--color-plasma, #6366F1));
   z-index: 10;
 }
 

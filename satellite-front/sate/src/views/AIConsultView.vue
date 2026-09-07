@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { agentApi, type AgentVO } from '@/api/agent'
@@ -28,6 +28,7 @@ const userStore = useUserStore()
 const { currentUserId } = storeToRefs(userStore)
 
 const draft = ref('')
+const chatInputRef = ref<HTMLTextAreaElement | null>(null)
 const messageListRef = ref<HTMLElement | null>(null)
 const nextMessageId = ref(2)
 const isAgentLoading = ref(false)
@@ -41,7 +42,7 @@ const messages = ref<ChatMessage[]>([
   {
     id: 1,
     role: 'ai',
-    content: '欢迎接入峡谷卫星 AI 指挥台。正在为你连接后端战术 Agent，请稍候。',
+    content: '欢迎接入灵境导览 AI 伴游助手。正在为你连接后端文旅智能体，请稍候。',
     timestamp: formatTime()
   }
 ])
@@ -146,7 +147,7 @@ const initAgents = async () => {
     const userId = resolveUserId()
     if (!userId) {
       setNotice('请先登录后再使用 AI 指挥终端。')
-      updateWelcomeMessage('未检测到有效登录身份，暂时无法连接战术 Agent。请先登录后再试。')
+      updateWelcomeMessage('未检测到有效登录身份，暂时无法连接文旅伴游智能体。请先登录后再试。')
       if (import.meta.env.DEV) {
         console.debug('[AIConsultView] initAgents.invalidUserId', {
           currentUserId: currentUserId.value,
@@ -166,17 +167,17 @@ const initAgents = async () => {
     agents.value = agentList
 
     if (!agentList.length) {
-      setNotice('当前暂无可用 Agent，请稍后刷新页面。')
-      updateWelcomeMessage('战术频道暂未部署可用 Agent，请稍后再进入指挥终端。')
+      setNotice('当前暂无可用智能体，请稍后刷新页面。')
+      updateWelcomeMessage('文旅伴游智能体正在部署中，请稍后再试。')
       return
     }
 
     selectedAgentId.value = agentList[0].agentId
-    updateWelcomeMessage(`欢迎接入峡谷卫星 AI 指挥台。当前已连接 ${agentList[0].name}，你可以直接开始提问。`)
+    updateWelcomeMessage(`欢迎接入灵境导览 AI 伴游助手。当前已连接 ${agentList[0].name}，你可以直接咨询衡阳文旅与特色美食。`)
   } catch (error) {
     console.error('初始化 Agent 列表失败:', error)
-    setNotice('Agent 初始化失败，请稍后重试。')
-    updateWelcomeMessage('战术频道连接失败，请稍后刷新重试。')
+    setNotice('智能体初始化失败，请稍后重试。')
+    updateWelcomeMessage('智能体服务连接异常，请稍后刷新重试。')
   } finally {
     isAgentLoading.value = false
     await scrollToBottom('auto')
@@ -248,14 +249,18 @@ const sendMessage = async () => {
   } catch (error) {
     console.error('调用 Agent 失败:', error)
     setNotice('AI 服务调用失败，请稍后重试。')
-    await replaceAiMessage(thinkingId, '抱歉，战术频道暂时波动，请稍后重新发送。')
+    await replaceAiMessage(thinkingId, '抱歉，智能体服务暂时波动，请稍后重新发送。')
   } finally {
     isSending.value = false
   }
 }
 
 const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Enter' && !event.shiftKey) {
+  if (event.isComposing || event.keyCode === 229) {
+    return
+  }
+
+  if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
     event.preventDefault()
     void sendMessage()
   }
@@ -270,8 +275,21 @@ const closePanel = () => {
   router.push('/')
 }
 
-onMounted(() => {
+const handleGlobalKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    closePanel()
+  }
+}
+
+onMounted(async () => {
+  window.addEventListener('keydown', handleGlobalKeydown)
   void initAgents()
+  await nextTick()
+  chatInputRef.value?.focus()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
 })
 </script>
 
@@ -293,7 +311,7 @@ onMounted(() => {
             <span>{{ statusText }}</span>
           </div>
         </div>
-        <button class="close-btn" type="button" aria-label="关闭" @click="closePanel">×</button>
+        <button class="close-btn touch-target" type="button" aria-label="关闭" @click="closePanel">×</button>
       </header>
 
       <div v-if="noticeText" class="notice-banner" :class="`notice-banner--${noticeType}`">
@@ -330,6 +348,7 @@ onMounted(() => {
       <!-- 紧凑输入区 -->
       <footer class="input-area">
         <textarea
+          ref="chatInputRef"
           v-model="draft"
           class="chat-input"
           rows="1"
@@ -338,8 +357,11 @@ onMounted(() => {
           :disabled="isSending || isAgentLoading || !selectedAgentId"
           @keydown="handleKeydown"
         />
-        <button class="send-button" :disabled="!canSend || !selectedAgentId" @click="sendMessage">
-          {{ isSending ? '...' : '发送' }}
+        <button class="send-button touch-target" :disabled="!canSend || !selectedAgentId" @click="sendMessage">
+          <span v-if="isSending" class="btn-spinner" aria-hidden="true">
+            <svg viewBox="0 0 24 24" class="spinner-icon"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 31.4" /></svg>
+          </span>
+          <span>发送</span>
         </button>
       </footer>
     </section>
@@ -361,11 +383,12 @@ onMounted(() => {
   height: 100%;
   max-width: 900px;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--surface-card-glass, rgba(15, 23, 42, 0.85));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-subtle);
   border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
@@ -375,7 +398,8 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-card, rgba(15, 23, 42, 0.9));
   gap: 12px;
   flex-shrink: 0;
 }
@@ -397,15 +421,23 @@ onMounted(() => {
 }
 
 .agent-select {
-  height: 32px;
-  padding: 0 10px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 12px;
   border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border-default);
+  background: var(--surface-overlay, rgba(30, 41, 59, 0.85));
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
-  max-width: 140px;
+  max-width: 160px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.agent-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-muted);
 }
 
 .status-chip {
@@ -414,47 +446,52 @@ onMounted(() => {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(34, 197, 94, 0.2);
-  background: rgba(34, 197, 94, 0.06);
-  color: #16A34A;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-success, #10B981);
   font-size: 12px;
   white-space: nowrap;
 }
 
 .status-chip--offline {
-  border-color: rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.06);
-  color: #DC2626;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger, #EF4444);
 }
 
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #22C55E;
+  background: var(--color-success, #10B981);
 }
 
 .status-chip--offline .status-dot {
-  background: #EF4444;
+  background: var(--color-danger, #EF4444);
 }
 
 .close-btn {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
-  font-size: 18px;
+  font-size: 20px;
   cursor: pointer;
   flex-shrink: 0;
+  transition: all var(--transition-fast);
 }
 
 .close-btn:hover {
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--color-danger-bg, rgba(239, 68, 68, 0.15));
+  border-color: var(--color-danger, #EF4444);
+  color: var(--color-danger, #EF4444);
 }
 
 /* ========== 通知条 ========== */
@@ -544,13 +581,15 @@ onMounted(() => {
 }
 
 .message-bubble--user {
-  background: var(--accent-cyan);
+  background: var(--color-primary);
   border-radius: 16px 16px 4px 16px;
-  color: #fff;
+  color: var(--text-inverse, #020617);
+  box-shadow: 0 2px 12px var(--color-primary-glow);
 }
 
 .message-bubble--ai {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--surface-overlay, rgba(30, 41, 59, 0.85));
+  border: 1px solid var(--border-subtle);
   border-radius: 16px 16px 16px 4px;
   color: var(--text-primary);
 }
@@ -558,13 +597,14 @@ onMounted(() => {
 .message-time {
   font-size: 11px;
   color: var(--text-secondary);
-  opacity: 0.6;
+  opacity: 0.7;
   padding: 0 4px;
 }
 
 .thinking-label {
   margin-left: 8px;
   font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .thinking-dots {
@@ -576,7 +616,7 @@ onMounted(() => {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--accent-cyan);
+  background: var(--color-primary);
   animation: dot-pulse 1.1s infinite ease-in-out;
 }
 
@@ -587,60 +627,71 @@ onMounted(() => {
 .input-area {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(255, 255, 255, 0.95);
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-card, rgba(15, 23, 42, 0.95));
   flex-shrink: 0;
 }
 
 .chat-input {
   flex: 1;
-  min-height: 38px;
-  max-height: 100px;
-  padding: 8px 12px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  min-height: 44px;
+  max-height: 120px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-default);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--surface-ground, rgba(7, 11, 20, 0.85));
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   resize: none;
   outline: none;
   font-family: inherit;
+  transition: all var(--transition-fast);
 }
 
 .chat-input:focus {
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-muted);
 }
 
 .chat-input::placeholder {
-  color: var(--text-secondary);
-  opacity: 0.5;
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 
 .send-button {
-  height: 38px;
-  padding: 0 16px;
+  height: 44px;
+  min-height: 44px;
+  min-width: 80px;
+  padding: 0 18px;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent-cyan), #60A5FA);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
+  background: var(--color-primary);
+  color: var(--text-inverse, #020617);
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 0 16px var(--color-primary-glow);
+  transition: all var(--transition-fast);
 }
 
 .send-button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .send-button:not(:disabled):hover {
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  background: var(--color-primary-hover);
+  box-shadow: 0 4px 20px var(--color-primary-glow);
 }
 
 @keyframes dot-pulse {
@@ -669,8 +720,10 @@ onMounted(() => {
   }
 
   .agent-select {
-    max-width: 100px;
-    font-size: 12px;
+    max-width: 120px;
+    height: 44px;
+    min-height: 44px;
+    font-size: 13px;
   }
 
   .status-chip {
@@ -696,7 +749,13 @@ onMounted(() => {
   }
 
   .chat-input {
+    min-height: 44px;
     font-size: 16px; /* 防止iOS缩放 */
+  }
+
+  .send-button {
+    height: 44px;
+    min-height: 44px;
   }
 }
 </style>

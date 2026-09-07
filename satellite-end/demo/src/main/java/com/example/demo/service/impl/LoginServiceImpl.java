@@ -1,14 +1,13 @@
-import com.example.demo.util.StringUtils;
 package com.example.demo.service.impl;
+
+import com.example.demo.util.StringUtils;
 
 import com.example.demo.common.Result;
 import com.example.demo.dto.LoginDTO;
 import com.example.demo.dto.LoginResponseVO;
 import com.example.demo.dto.RegisterDTO;
 import com.example.demo.dto.ResetPasswordDTO;
-import com.example.demo.dto.UserHeroVO;
 import com.example.demo.mapper.LoginMapper;
-import com.example.demo.mapper.UserHeroMapper;
 import com.example.demo.mapper.UserMapper;
 import com.example.demo.pojo.Login;
 import com.example.demo.service.EmailService;
@@ -30,7 +29,6 @@ public class LoginServiceImpl implements LoginService {
 
     private final LoginMapper loginMapper;
     private final UserMapper userMapper;
-    private final UserHeroMapper userHeroMapper;
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
     private final JwtUtil jwtUtil;
@@ -300,13 +298,10 @@ public class LoginServiceImpl implements LoginService {
     // ----------------------------------------------------------------
 
     private LoginResponseVO buildLoginResponse(Login login) {
-        List<UserHeroVO> heroList = userHeroMapper.listByUserId(login.getUserId());
-        int heroCount = heroList == null ? 0 : heroList.size();
-        
         // 生成JWT Token
         String token = jwtUtil.generateToken(login.getUserId(), login.getPhone(), login.getStatus());
         
-        LoginResponseVO response = new LoginResponseVO(login.getUserId(), login.getStatus(), heroCount, heroCount == 0, heroList);
+        LoginResponseVO response = new LoginResponseVO(login.getUserId(), login.getStatus());
         response.setToken(token);
         return response;
     }

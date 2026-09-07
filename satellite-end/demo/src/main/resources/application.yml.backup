@@ -10,19 +10,19 @@ spring:
   datasource:
     # 1. 驱动保持不变
     driver-class-name: com.mysql.cj.jdbc.Driver
-    # 2. 修改 URL：将 localhost 换成你的腾讯云外网域名
-    # 注意：txrw 是你的数据库名，请确保你在腾讯云里已经创建了这个库
-    url: jdbc:mysql://gz-cdb-mvz0yjgp.sql.tencentcdb.com:24180/txrw?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-    # 3. 账号通常是 root
-    username: root
-    # 4. 修改密码：填入你在腾讯云设置的数据库密码（不是原来的 123456 了）
-    password: Pld200501251807.
+    # 2. 修改 URL：将 localhost 换成你的数据库域名
+    # 注意：txrw 是你的数据库名，请确保你已经创建了这个库
+    url: ${DB_URL:jdbc:mysql://localhost:3306/txrw?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    # 3. 账号
+    username: ${DB_USERNAME:root}
+    # 4. 修改密码：从环境变量中读取，禁止明文硬编码生产密码
+    password: ${DB_PASSWORD:******}
 
   mail:
     host: ${MAIL_HOST:smtp.qq.com}
     port: ${MAIL_PORT:465}
-    username: ${MAIL_USERNAME:1025848660@qq.com}
-    password: ${MAIL_PASSWORD:enysbfayuvosbbeg}
+    username: ${MAIL_USERNAME:example@qq.com}
+    password: ${MAIL_PASSWORD:******}
     protocol: smtp
     default-encoding: UTF-8
     properties:
@@ -39,7 +39,7 @@ spring:
 
 app:
   mail:
-    from: ${MAIL_FROM:${MAIL_USERNAME:1025848660@qq.com}}
+    from: ${MAIL_FROM:${MAIL_USERNAME:example@qq.com}}
     from-name: ${MAIL_FROM_NAME:TX任务网}
 
 mybatis:

@@ -4,11 +4,9 @@ import com.example.demo.common.Result;
 import com.example.demo.dto.CancelAccountDTO;
 import com.example.demo.dto.UpdateUserDTO;
 import com.example.demo.dto.UpdateUserStatusDTO;
-import com.example.demo.dto.UserHeroVO;
 import com.example.demo.dto.UserInfoVO;
 import com.example.demo.dto.UserManageVO;
 import com.example.demo.mapper.LoginMapper;
-import com.example.demo.mapper.UserHeroMapper;
 import com.example.demo.mapper.UserMapper;
 import com.example.demo.pojo.Login;
 import com.example.demo.pojo.User;
@@ -27,7 +25,6 @@ public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
     private final LoginMapper loginMapper;
-    private final UserHeroMapper userHeroMapper;
     private final StringRedisTemplate redisTemplate;
 
 
@@ -46,9 +43,6 @@ public class UserServiceImpl implements UserService {
             return Result.error(404, "用户不存在");
         }
 
-        List<UserHeroVO> heroList = userHeroMapper.listByUserId(userId);
-        int heroCount = heroList == null ? 0 : heroList.size();
-
         UserInfoVO vo = new UserInfoVO();
         vo.setUserId(userId);
         vo.setName(user.getName());
@@ -56,9 +50,6 @@ public class UserServiceImpl implements UserService {
         vo.setSignature(user.getSignature());
         vo.setPhone(maskPhone(login.getPhone()));
         vo.setEmail(maskEmail(login.getEmail()));
-        vo.setHeroCount(heroCount);
-        vo.setNeedChooseHero(heroCount == 0);
-        vo.setHeroList(heroList);
         return Result.success(vo);
     }
 
@@ -187,7 +178,6 @@ public class UserServiceImpl implements UserService {
             return Result.error(403, "仅普通用户可自助注销账户");
         }
 
-        userHeroMapper.deleteByUserId(userId);
         userMapper.deleteByUserId(userId);
         loginMapper.deleteByUserId(userId);
 

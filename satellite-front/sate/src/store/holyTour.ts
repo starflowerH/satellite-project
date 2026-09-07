@@ -185,7 +185,7 @@ const normalizeRouteObject = (raw: unknown): HolyTourRouteData | null => {
   const heroName =
     toSafeString(source.heroName ?? source.hero ?? source.roleName) ||
     extractHeroNameFromRouteName(routeName) ||
-    toSafeString(useUserStore().userInfo.mainHeroes[0]) ||
+    toSafeString(useUserStore().userInfo.mainHeroes?.[0]) ||
     '未命名英雄'
   const heroThemeColor = toSafeString(source.heroThemeColor)
 
@@ -427,7 +427,7 @@ export const useHolyTourStore = defineStore('holyTour', () => {
 
   const fetchPrimaryHeroRoute = async (userId: string, city = ''): Promise<HolyTourRouteData | null> => {
     const userStore = useUserStore()
-    const primaryHero = toSafeString(userStore.userInfo.mainHeroes[0])
+    const primaryHero = toSafeString(userStore.userInfo.mainHeroes?.[0])
 
     if (!primaryHero) {
       error.value = '当前用户还没有设置本命英雄，暂时无法预加载英雄巡游路线'
@@ -441,7 +441,7 @@ export const useHolyTourStore = defineStore('holyTour', () => {
     const normalizedCity = normalizeCityKey(city)
     const normalizedUserId = toSafeString(userId)
     const userStore = useUserStore()
-    const primaryHero = toSafeString(userStore.userInfo.mainHeroes[0])
+    const primaryHero = toSafeString(userStore.userInfo.mainHeroes?.[0])
 
     if (!normalizedCity) {
       error.value = '城市不能为空，无法获取圣地巡游推荐'

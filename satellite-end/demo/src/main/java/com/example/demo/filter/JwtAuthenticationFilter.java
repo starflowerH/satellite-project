@@ -82,15 +82,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private boolean isPublicPath(String path) {
         // 公开路径，不需要认证
         return path.startsWith("/auth/") ||
-               path.startsWith("/hero/list") ||
                path.startsWith("/amap/") ||
+               path.startsWith("/routes") ||
+               path.startsWith("/api/routes") ||
+               path.startsWith("/merchants") ||
+               path.startsWith("/api/merchants") ||
+               path.startsWith("/dishes") ||
+               path.startsWith("/api/dishes") ||
+               path.startsWith("/pois") ||
+               path.startsWith("/api/pois") ||
+               path.startsWith("/user-profile") ||
+               path.startsWith("/api/user-profile") ||
+               path.startsWith("/profile") ||
+               path.startsWith("/api/profile") ||
                path.equals("/error");
     }
 
     private boolean requiresAuthentication(String path) {
         // 需要认证的路径
         return path.startsWith("/user/") ||
-               path.startsWith("/agent/") ||
-               path.startsWith("/hero/my/");
+               path.startsWith("/agent/");
     }
 }

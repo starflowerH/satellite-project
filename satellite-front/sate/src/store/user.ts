@@ -6,16 +6,17 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { authApi } from '@/api/auth'
 import type { ResetPasswordDTO } from '@/api/auth'
-import { heroApi } from '@/api/hero'
+import { travelApi } from '@/api/travel'
 import { userApi } from '@/api/user'
 import type { UpdateUserDTO, UserInfoVO } from '@/api/user'
+import type { UserProfileVO } from '@/types/travel'
 import { toSafeString as safeStr } from '@/utils/common'
 
 const TOKEN_KEY = 'access_token'
 const USER_ID_KEY = 'user_id'
 const SESSION_AUTH_KEY = 'session_authenticated'
 const CITY_KEY = 'user_city'
-const HERO_LIMIT = 5
+const TRAVEL_PROFILE_KEY = 'sate_user_travel_profile'
 
 const createAvatar = (seed: string): string => {
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed || 'satellite')}`
@@ -24,36 +25,6 @@ const createAvatar = (seed: string): string => {
 // 使用公共工具函数的别名
 const toSafeString = safeStr
 
-const normalizeStringList = (value: unknown): string[] => {
-  const rawItems = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(/[，,、|]/)
-      : []
-
-  const result: string[] = []
-
-  for (const item of rawItems) {
-    let text = ''
-
-    if (typeof item === 'string' || typeof item === 'number') {
-      text = toSafeString(item)
-    } else if (item && typeof item === 'object') {
-      const record = item as Record<string, unknown>
-      text = toSafeString(record.name ?? record.heroName ?? record.title ?? record.label ?? record.value)
-    }
-
-    if (text && !result.includes(text)) {
-      result.push(text)
-    }
-
-    if (result.length >= HERO_LIMIT) {
-      break
-    }
-  }
-
-  return result
-}
 
 const getPersistedUserId = (): string => {
   return localStorage.getItem(USER_ID_KEY) || ''
@@ -61,6 +32,25 @@ const getPersistedUserId = (): string => {
 
 const getPersistedCity = (): string => {
   return localStorage.getItem(CITY_KEY) || ''
+}
+
+const defaultTravelProfile: UserProfileVO = {
+  userId: 0,
+  spicyLevel: '微辣',
+  flavorPref: '咸鲜',
+  dietaryRestrictions: ['不吃内脏'],
+  travelPace: '松弛',
+  budgetPerMeal: 35,
+}
+
+const getPersistedTravelProfile = (): UserProfileVO => {
+  try {
+    const raw = localStorage.getItem(TRAVEL_PROFILE_KEY)
+    if (raw) return { ...defaultTravelProfile, ...JSON.parse(raw) }
+  } catch (e) {
+    console.warn('读取持久化出行画像失败:', e)
+  }
+  return { ...defaultTravelProfile }
 }
 
 const createEmptyUserInfo = (): UserInfoVO => ({
@@ -71,7 +61,6 @@ const createEmptyUserInfo = (): UserInfoVO => ({
   city: getPersistedCity(),
   phone: '',
   email: '',
-  mainHeroes: [],
 })
 
 export const useUserStore = defineStore('user', () => {
@@ -79,6 +68,7 @@ export const useUserStore = defineStore('user', () => {
   const sessionAuthenticated = ref<boolean>(localStorage.getItem(SESSION_AUTH_KEY) === '1')
   const userInfo = ref<UserInfoVO>(createEmptyUserInfo())
   const profileResolved = ref(false)
+  const travelProfile = ref<UserProfileVO>(getPersistedTravelProfile())
 
   const isAuthenticated = computed(() => !!token.value || sessionAuthenticated.value)
 
@@ -87,15 +77,11 @@ export const useUserStore = defineStore('user', () => {
   })
 
   const displayName = computed(() => {
-    return userInfo.value.name || userInfo.value.phone || userInfo.value.email || '未命名召唤师'
+    return userInfo.value.name || userInfo.value.phone || userInfo.value.email || '衡阳旅人'
   })
 
   const displayAvatar = computed(() => {
     return userInfo.value.avatar || createAvatar(displayName.value)
-  })
-
-  const needsHeroSelection = computed(() => {
-    return isAuthenticated.value && profileResolved.value && userInfo.value.mainHeroes.length === 0
   })
 
   const user = computed(() => ({
@@ -104,7 +90,6 @@ export const useUserStore = defineStore('user', () => {
     city: userInfo.value.city,
     phone: userInfo.value.phone,
     email: userInfo.value.email,
-    mainHeroes: userInfo.value.mainHeroes,
     isLoggedin: isAuthenticated.value,
   }))
 
@@ -236,7 +221,6 @@ export const useUserStore = defineStore('user', () => {
       city: payload.city ?? userInfo.value.city,
       phone: payload.phone ?? userInfo.value.phone,
       email: payload.email ?? userInfo.value.email,
-      mainHeroes: payload.mainHeroes ?? userInfo.value.mainHeroes,
     }
 
     userInfo.value = merged
@@ -291,24 +275,51 @@ export const useUserStore = defineStore('user', () => {
       city,
       phone,
       email,
-      mainHeroes: fallback.mainHeroes ?? userInfo.value.mainHeroes,
     })
   }
 
-  const fetchMainHeroes = async (): Promise<boolean> => {
-    const userId = ensureUserId()
-    if (!userId) {
+  const fetchTravelProfile = async (targetUserId?: string | number): Promise<boolean> => {
+    const uid = targetUserId || currentUserId.value || 0
+    try {
+      const response = await travelApi.getUserProfile(uid)
+      if (isRequestSuccess(response) && response.data) {
+        const data = response.data
+        const profileData: UserProfileVO = {
+          userId: Number(data.userId || uid),
+          spicyLevel: data.spicyLevel || travelProfile.value.spicyLevel,
+          flavorPref: toSafeString(data.flavorPref) || travelProfile.value.flavorPref,
+          dietaryRestrictions: Array.isArray(data.dietaryRestrictions)
+            ? data.dietaryRestrictions
+            : travelProfile.value.dietaryRestrictions,
+          travelPace: toSafeString(data.travelPace) || travelProfile.value.travelPace,
+          budgetPerMeal: typeof data.budgetPerMeal === 'number' ? data.budgetPerMeal : travelProfile.value.budgetPerMeal,
+        }
+        travelProfile.value = profileData
+        localStorage.setItem(TRAVEL_PROFILE_KEY, JSON.stringify(profileData))
+        return true
+      }
+      return false
+    } catch (error) {
+      console.warn('获取用户出行饮食画像异常:', error)
       return false
     }
+  }
+
+  const updateTravelProfile = async (payload: Partial<UserProfileVO>): Promise<boolean> => {
+    const uid = Number(currentUserId.value) || 0
+    const merged: UserProfileVO = {
+      ...travelProfile.value,
+      ...payload,
+      userId: uid,
+    }
+    travelProfile.value = merged
+    localStorage.setItem(TRAVEL_PROFILE_KEY, JSON.stringify(merged))
 
     try {
-      const list = await heroApi.listMyHeroes(userId)
-      const mainHeroes = normalizeStringList(list.map((item) => item.heroName))
-      mergeUserInfo({ mainHeroes })
-      return true
+      const response = await travelApi.updateUserProfile(merged)
+      return isRequestSuccess(response)
     } catch (error) {
-      console.error('获取本命英雄失败:', error)
-      mergeUserInfo({ mainHeroes: [] })
+      console.warn('同步出行饮食画像至后端异常:', error)
       return false
     }
   }
@@ -338,12 +349,8 @@ export const useUserStore = defineStore('user', () => {
 
   const fetchUserProfile = async (): Promise<boolean> => {
     const profileOk = await fetchUserInfo()
-    if (!profileOk) {
-      return false
-    }
-
-    await fetchMainHeroes()
-    return true
+    await fetchTravelProfile()
+    return profileOk
   }
 
   const updateUserProfile = async (
@@ -373,40 +380,10 @@ export const useUserStore = defineStore('user', () => {
       }
 
       const data = extractBusinessData(response)
-      patchUserInfoFromRaw(data, { ...requestPayload, city: userInfo.value.city, mainHeroes: userInfo.value.mainHeroes })
+      patchUserInfoFromRaw(data, { ...requestPayload, city: userInfo.value.city })
       return true
     } catch (error) {
       console.error('更新用户信息异常:', error)
-      return false
-    }
-  }
-
-  const saveMainHeroes = async (heroIds: string[]): Promise<boolean> => {
-    const userId = ensureUserId()
-    if (!userId) {
-      return false
-    }
-
-    const normalizedHeroIds = normalizeStringList(heroIds)
-    if (!normalizedHeroIds.length) {
-      return false
-    }
-
-    try {
-      const response = await heroApi.saveMyHeroes({
-        userId,
-        heroIds: normalizedHeroIds,
-      })
-
-      if (!isRequestSuccess(response)) {
-        console.error('保存本命英雄失败:', response)
-        return false
-      }
-
-      await fetchMainHeroes()
-      return true
-    } catch (error) {
-      console.error('保存本命英雄异常:', error)
       return false
     }
   }
@@ -581,20 +558,20 @@ export const useUserStore = defineStore('user', () => {
     token,
     userInfo,
     user,
+    travelProfile,
     isAuthenticated,
     currentUserId,
     displayName,
     displayAvatar,
-    needsHeroSelection,
 
     saveToken,
     clearToken,
 
     fetchUserInfo,
-    fetchMainHeroes,
     fetchUserProfile,
     updateUserProfile,
-    saveMainHeroes,
+    fetchTravelProfile,
+    updateTravelProfile,
     setLocalCity,
     bootstrapSession,
 

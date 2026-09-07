@@ -1,10 +1,7 @@
-﻿<script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { heroApi } from '@/api/hero'
-import type { HeroOption } from '@/api/hero'
-import MainHeroSelector from '@/components/MainHeroSelector.vue'
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUserStore } from '@/store/user'
-import { locateCurrentCity } from '@/utils/geolocation'
+import type { SpicyLevel, UserProfileVO } from '@/types/travel'
 
 const props = defineProps<{
   visible: boolean
@@ -14,772 +11,912 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
-const HERO_LIMIT = 5
-
 const userStore = useUserStore()
 
-const isEditMode = ref(false)
 const isSaving = ref(false)
-const isHeroLoading = ref(false)
-const isLocating = ref(false)
-const heroOptions = ref<HeroOption[]>([])
-const heroKeyword = ref('')
-const message = ref('')
-const messageType = ref<'success' | 'error'>('success')
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
 
-const editForm = ref({
-  name: '',
-  avatar: '',
-  signature: '',
-  city: '',
-  mainHeroes: [] as string[],
+// 本地草稿表单状态
+const form = ref<UserProfileVO>({
+  userId: 0,
+  spicyLevel: '微辣',
+  flavorPref: '咸鲜',
+  dietaryRestrictions: ['不吃内脏'],
+  travelPace: '松弛',
+  budgetPerMeal: 35,
 })
 
-const profile = computed(() => userStore.userInfo)
+// 辣度等级定义
+const SPICY_OPTIONS: { level: SpicyLevel; label: string; desc: string; icon: string }[] = [
+  { level: '不辣', label: '不辣', desc: '清淡鲜美 · 原汁原味', icon: '🟢' },
+  { level: '微辣', label: '微辣', desc: '微辛提味 · 点缀鲜香', icon: '🟡' },
+  { level: '中辣', label: '中辣', desc: '地道湘味 · 鲜辣开胃', icon: '🟠' },
+  { level: '重辣', label: '重辣', desc: '衡阳黄贡椒 · 爆炒香辣', icon: '🔴' },
+]
 
-const normalizeHeroes = (heroes: string[]): string[] => {
-  const result: string[] = []
+// 常见忌口标签选项
+const DIETARY_OPTIONS: { id: string; label: string; icon: string }[] = [
+  { id: '不吃内脏', label: '不吃内脏', icon: '🥩' },
+  { id: '免香菜', label: '免香菜', icon: '🌿' },
+  { id: '不吃海鲜', label: '不吃海鲜', icon: '🐟' },
+  { id: '清真饮食', label: '清真饮食', icon: '🕌' },
+  { id: '免葱姜蒜', label: '免葱姜蒜', icon: '🧄' },
+  { id: '纯素食', label: '纯素食', icon: '🥗' },
+]
 
-  for (const hero of heroes.map((item) => item.trim()).filter(Boolean)) {
-    if (result.includes(hero)) continue
-    result.push(hero)
-    if (result.length >= HERO_LIMIT) break
+// 预算预设快捷锚点
+const BUDGET_PRESETS = [
+  { value: 20, label: '¥20 (特色小吃)' },
+  { value: 35, label: '¥35 (地道简餐)' },
+  { value: 60, label: '¥60 (特色土菜)' },
+  { value: 100, label: '¥100 (丰盛宴席)' },
+]
+
+// 动态预算档位说明
+const budgetTier = computed(() => {
+  const b = form.value.budgetPerMeal || 35
+  if (b < 35) {
+    return { name: '平价实惠', desc: '主推衡阳鲜鱼粉、校园后街糖水与特色小吃', color: 'tier-green' }
   }
-
-  return result
-}
-
-const resolveHeroIds = (heroNames: string[]): string[] => {
-  const uniqueNames = normalizeHeroes(heroNames)
-  const ids: string[] = []
-  const seen = new Set<string>()
-
-  for (const name of uniqueNames) {
-    const matched = heroOptions.value.find((hero) => hero.name === name)
-    const heroId = matched?.heroId?.trim()
-    if (!heroId || seen.has(heroId)) continue
-    seen.add(heroId)
-    ids.push(heroId)
+  if (b <= 80) {
+    return { name: '品质小资', desc: '推荐东洲土菜馆老豆腐鱼鲜、招牌农家一碗香等舒适聚餐', color: 'tier-cyan' }
   }
+  return { name: '丰盛宴饮', desc: '解锁衡东土头碗、特色江鲜与地道全景宴客体验', color: 'tier-gold' }
+})
 
-  return ids
-}
-
-const syncEditForm = () => {
-  editForm.value = {
-    name: profile.value.name,
-    avatar: profile.value.avatar,
-    signature: profile.value.signature,
-    city: profile.value.city,
-    mainHeroes: [...profile.value.mainHeroes],
+// 同步 Store 状态至本地草稿
+const syncFromStore = () => {
+  const current = userStore.travelProfile
+  form.value = {
+    userId: current.userId ?? 0,
+    spicyLevel: current.spicyLevel || '微辣',
+    flavorPref: current.flavorPref || '咸鲜',
+    dietaryRestrictions: [...(current.dietaryRestrictions || ['不吃内脏'])],
+    travelPace: current.travelPace || '松弛',
+    budgetPerMeal: current.budgetPerMeal || 35,
   }
-}
-
-const loadHeroOptions = async (keyword = heroKeyword.value) => {
-  if (isHeroLoading.value) return
-
-  isHeroLoading.value = true
-
-  try {
-    heroOptions.value = await heroApi.listHeroes({ keyword })
-  } catch (error) {
-    console.error('获取英雄列表失败:', error)
-    messageType.value = 'error'
-    message.value = '英雄列表加载失败，请稍后重试'
-  } finally {
-    isHeroLoading.value = false
-  }
-}
-
-const handleHeroSearchChange = (keyword: string) => {
-  heroKeyword.value = keyword.trim()
-  void loadHeroOptions(heroKeyword.value)
 }
 
 watch(
   () => props.visible,
-  (visible) => {
-    if (!visible) return
-
-    isEditMode.value = false
-    message.value = ''
-    syncEditForm()
-
-    void (async () => {
-      await Promise.all([userStore.fetchUserProfile(), loadHeroOptions()])
-      syncEditForm()
-    })()
+  (val) => {
+    if (val) {
+      syncFromStore()
+      toastMessage.value = ''
+      // 在打开时重新获取远端画像
+      void userStore.fetchTravelProfile()
+    }
   },
+  { immediate: true },
 )
 
-const closePanel = () => {
-  emit('close')
+const selectSpicy = (level: SpicyLevel) => {
+  form.value.spicyLevel = level
 }
 
-const startEdit = () => {
-  message.value = ''
-  isEditMode.value = true
-  syncEditForm()
-  void loadHeroOptions()
-}
-
-const cancelEdit = () => {
-  message.value = ''
-  isEditMode.value = false
-  syncEditForm()
-}
-
-const handleHeroLimit = (limit: number) => {
-  messageType.value = 'error'
-  message.value = `本命英雄最多选择 ${limit} 位`
-}
-
-const handleLocateCity = async () => {
-  if (isLocating.value) return
-
-  isLocating.value = true
-  message.value = ''
-
-  try {
-    const result = await locateCurrentCity()
-    editForm.value.city = result.city
-    messageType.value = 'success'
-    message.value = `定位成功：${result.city}`
-  } catch (error) {
-    console.error('城市定位失败:', error)
-    messageType.value = 'error'
-    message.value = '定位失败，请检查定位权限后重试'
-  } finally {
-    isLocating.value = false
+const toggleRestriction = (tag: string) => {
+  const list = form.value.dietaryRestrictions
+  const index = list.indexOf(tag)
+  if (index >= 0) {
+    list.splice(index, 1)
+  } else {
+    list.push(tag)
   }
 }
 
-const saveProfile = async () => {
-  const name = editForm.value.name.trim()
-  const avatar = editForm.value.avatar.trim()
-  const signature = editForm.value.signature.trim()
-  const city = editForm.value.city.trim()
-  const mainHeroes = normalizeHeroes(editForm.value.mainHeroes)
-  const userId = userStore.currentUserId
+const isRestrictionSelected = (tag: string): boolean => {
+  return form.value.dietaryRestrictions.includes(tag)
+}
 
-  if (!userId) {
-    console.error('错误：未获取到当前登录用户ID')
-    messageType.value = 'error'
-    message.value = '保存失败：未获取到用户ID，请重新登录后重试'
-    return
-  }
+const setPresetBudget = (val: number) => {
+  form.value.budgetPerMeal = val
+}
 
-  if (!name) {
-    messageType.value = 'error'
-    message.value = '网名不能为空'
-    return
-  }
+const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+  if (toastTimer) clearTimeout(toastTimer)
+  toastMessage.value = msg
+  toastType.value = type
+  toastTimer = setTimeout(() => {
+    toastMessage.value = ''
+  }, 2600)
+}
 
-  if (name.length > 24) {
-    messageType.value = 'error'
-    message.value = '网名长度不能超过 24 个字符'
-    return
-  }
-
-  if (signature.length > 80) {
-    messageType.value = 'error'
-    message.value = '个性签名不能超过 80 个字符'
-    return
-  }
-
-  if (!mainHeroes.length) {
-    messageType.value = 'error'
-    message.value = '请至少选择 1 位本命英雄'
-    return
-  }
-
-  if (mainHeroes.length > HERO_LIMIT) {
-    messageType.value = 'error'
-    message.value = `本命英雄最多选择 ${HERO_LIMIT} 位`
-    return
-  }
-
-  const heroIds = resolveHeroIds(mainHeroes)
-  if (heroIds.length !== mainHeroes.length) {
-    messageType.value = 'error'
-    message.value = '部分英雄缺少有效 ID，请重新搜索后再保存'
-    return
-  }
-
+const handleSave = async () => {
   isSaving.value = true
-
   try {
-    const profileSuccess = await userStore.updateUserProfile({
-      userId,
-      name,
-      avatar,
-      signature,
-    })
-
-    if (!profileSuccess) {
-      messageType.value = 'error'
-      message.value = '资料保存失败，请稍后重试'
-      return
-    }
-
-    const heroSuccess = await userStore.saveMainHeroes(heroIds)
-
-    if (!heroSuccess) {
-      messageType.value = 'error'
-      message.value = '本命英雄保存失败，请稍后重试'
-      return
-    }
-
-    if (city) {
-      userStore.setLocalCity(city)
-    }
-
-    messageType.value = 'success'
-    message.value = '修改成功'
-    isEditMode.value = false
-    syncEditForm()
+    await userStore.updateTravelProfile(form.value)
+    showToast('✨ 偏好配置已保存并同步至智能体', 'success')
+    setTimeout(() => {
+      emit('close')
+    }, 600)
+  } catch (error) {
+    console.error('保存画像偏好失败:', error)
+    showToast('保存异常，请稍后重试', 'error')
   } finally {
     isSaving.value = false
   }
 }
 
-const handleLogout = () => {
-  userStore.logout()
+const handleClose = () => {
   emit('close')
 }
+
+// 全局键盘 Escape 支持
+const handleKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && props.visible) {
+    handleClose()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onBeforeUnmount(() => {
+  if (toastTimer) clearTimeout(toastTimer)
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
   <Teleport to="body">
-    <Transition name="profile-fade">
-      <div v-if="props.visible" class="profile-overlay" @click.self="closePanel">
-        <section class="profile-panel" :class="{ 'profile-panel--edit': isEditMode }">
-          <header class="panel-header">
-            <div class="title-box">
-              <p class="label">Pilot Profile</p>
-              <h3>个人资料中心</h3>
+    <Transition name="drawer">
+      <div v-if="props.visible" class="drawer-backdrop" @click.self="handleClose">
+        <aside
+          class="drawer-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="drawer-title"
+        >
+          <!-- 抽屉头部 -->
+          <header class="drawer-header">
+            <div class="header-titles">
+              <span class="header-badge">PREFERENCE PROFILE</span>
+              <h2 id="drawer-title" class="header-title">出行与饮食偏好画像</h2>
+              <p class="header-desc">
+                根据您的口味与单餐预算，4阶段 Agent 自动过滤避坑菜品
+              </p>
             </div>
-            <button class="icon-btn" type="button" @click="closePanel">×</button>
+            <button
+              class="close-btn touch-target"
+              type="button"
+              aria-label="关闭偏好抽屉"
+              @click="handleClose"
+            >
+              ×
+            </button>
           </header>
 
-          <div class="profile-main">
-            <div class="avatar-wrap">
-              <img :src="userStore.displayAvatar" :alt="userStore.displayName" class="avatar" />
+          <!-- 抽屉主体内容 (弹性纵向滚动) -->
+          <main class="drawer-body">
+            <!-- 用户身份简要信息 -->
+            <div class="profile-card">
+              <img :src="userStore.displayAvatar" :alt="userStore.displayName" class="user-avatar" />
+              <div class="user-meta">
+                <div class="user-name-row">
+                  <span class="user-name">{{ userStore.displayName }}</span>
+                  <span class="badge-status">
+                    <span class="status-dot" /> 偏好实时同步
+                  </span>
+                </div>
+                <div class="user-city-row">
+                  <span>📍 所在城市：{{ userStore.userInfo.city || '衡阳市' }}</span>
+                </div>
+              </div>
             </div>
 
-            <template v-if="!isEditMode">
-              <div class="info-grid">
-                <div class="info-item">
-                  <span class="item-label">网名</span>
-                  <span class="item-value">{{ userStore.displayName }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="item-label">个性签名</span>
-                  <span class="item-value item-sign">{{ profile.signature || '这个人很神秘，什么都没留下。' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="item-label">所在城市</span>
-                  <span class="item-value">{{ profile.city || '未定位' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="item-label">本命英雄</span>
-                  <div v-if="profile.mainHeroes.length" class="hero-badges">
-                    <span v-for="hero in profile.mainHeroes" :key="hero" class="hero-badge">{{ hero }}</span>
+            <!-- 配置模块 1：辣度等级单选 -->
+            <section class="pref-section">
+              <div class="section-title-row">
+                <span class="section-icon">🌶️</span>
+                <h3 class="section-title">辣度耐受等级</h3>
+                <span class="active-badge">{{ form.spicyLevel }}</span>
+              </div>
+              <p class="section-hint">湖南衡阳菜系以鲜辣著称，智能体将严格依此匹配必点菜品：</p>
+
+              <div class="spicy-grid" role="radiogroup" aria-label="辣度等级">
+                <button
+                  v-for="opt in SPICY_OPTIONS"
+                  :key="opt.level"
+                  type="button"
+                  class="spicy-card touch-target"
+                  :class="{ 'is-active': form.spicyLevel === opt.level }"
+                  role="radio"
+                  :aria-checked="form.spicyLevel === opt.level"
+                  @click="selectSpicy(opt.level)"
+                >
+                  <span class="spicy-icon">{{ opt.icon }}</span>
+                  <div class="spicy-info">
+                    <span class="spicy-label">{{ opt.label }}</span>
+                    <span class="spicy-desc">{{ opt.desc }}</span>
                   </div>
-                  <span v-else class="item-value">暂未设置</span>
-                </div>
-                <div class="info-item">
-                  <span class="item-label">手机号</span>
-                  <span class="item-value">{{ profile.phone || '未绑定' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="item-label">邮箱</span>
-                  <span class="item-value">{{ profile.email || '未绑定' }}</span>
-                </div>
+                  <span v-if="form.spicyLevel === opt.level" class="check-mark">✓</span>
+                </button>
               </div>
+            </section>
 
-              <div class="action-row">
-                <button class="action-btn action-btn--primary" type="button" @click="startEdit">编辑资料</button>
-                <button class="action-btn action-btn--danger" type="button" @click="handleLogout">退出登录</button>
+            <!-- 配置模块 2：常见忌口标签多选 -->
+            <section class="pref-section">
+              <div class="section-title-row">
+                <span class="section-icon">🚫</span>
+                <h3 class="section-title">常见饮食忌口</h3>
+                <span class="active-count">已选 {{ form.dietaryRestrictions.length }} 项</span>
               </div>
-            </template>
+              <p class="section-hint">
+                命中忌口食材的菜品（如黄贡椒脆肚、假羊肉）将自动被剔除或警示：
+              </p>
 
-            <template v-else>
-              <div class="form-grid">
-                <label class="field-label" for="name">网名</label>
-                <input id="name" v-model="editForm.name" type="text" class="field-input" placeholder="请输入你的网名" maxlength="24" />
+              <div class="restrictions-chips">
+                <button
+                  v-for="diet in DIETARY_OPTIONS"
+                  :key="diet.id"
+                  type="button"
+                  class="diet-chip touch-target"
+                  :class="{ 'is-selected': isRestrictionSelected(diet.id) }"
+                  @click="toggleRestriction(diet.id)"
+                >
+                  <span class="chip-icon">{{ diet.icon }}</span>
+                  <span class="chip-label">{{ diet.label }}</span>
+                  <span v-if="isRestrictionSelected(diet.id)" class="chip-check">✓</span>
+                </button>
+              </div>
+            </section>
 
-                <label class="field-label" for="avatar">头像 URL</label>
-                <input id="avatar" v-model="editForm.avatar" type="text" class="field-input" placeholder="https://..." />
+            <!-- 配置模块 3：单餐人均预算滑块 -->
+            <section class="pref-section">
+              <div class="section-title-row">
+                <span class="section-icon">💰</span>
+                <h3 class="section-title">单餐人均预算</h3>
+                <span class="budget-badge">¥{{ form.budgetPerMeal }} / 餐</span>
+              </div>
+              <p class="section-hint">动态推荐人均消费在预算以内的特色餐饮商户：</p>
 
-                <label class="field-label" for="signature">个性签名</label>
-                <textarea
-                  id="signature"
-                  v-model="editForm.signature"
-                  class="field-input field-textarea"
-                  rows="3"
-                  maxlength="80"
-                  placeholder="写点你的战场宣言..."
+              <!-- 滑块容器 -->
+              <div class="slider-container">
+                <div class="slider-labels">
+                  <span class="slider-min">¥15</span>
+                  <span class="slider-current">当前设置：¥{{ form.budgetPerMeal }}</span>
+                  <span class="slider-max">¥150</span>
+                </div>
+                <input
+                  v-model.number="form.budgetPerMeal"
+                  type="range"
+                  min="15"
+                  max="150"
+                  step="5"
+                  class="budget-range"
+                  aria-label="单餐人均预算滑块"
                 />
+              </div>
 
-                <label class="field-label" for="city">所在城市</label>
-                <div class="city-row">
-                  <input id="city" v-model="editForm.city" type="text" class="field-input" placeholder="点击右侧按钮自动定位" />
-                  <button class="locate-btn" type="button" :disabled="isLocating" @click="handleLocateCity">
-                    {{ isLocating ? '定位中...' : '自动定位' }}
+              <!-- 档位说明徽标 -->
+              <div class="tier-card" :class="budgetTier.color">
+                <div class="tier-head">
+                  <span class="tier-badge">{{ budgetTier.name }}</span>
+                  <span class="tier-price">（当前单餐期望约 ¥{{ form.budgetPerMeal }}）</span>
+                </div>
+                <p class="tier-desc">{{ budgetTier.desc }}</p>
+              </div>
+
+              <!-- 常见档位快捷点击 -->
+              <div class="presets-row">
+                <span class="presets-label">快速设定：</span>
+                <div class="presets-chips">
+                  <button
+                    v-for="p in BUDGET_PRESETS"
+                    :key="p.value"
+                    type="button"
+                    class="preset-chip touch-target"
+                    :class="{ 'is-active': form.budgetPerMeal === p.value }"
+                    @click="setPresetBudget(p.value)"
+                  >
+                    {{ p.label }}
                   </button>
                 </div>
-
-                <label class="field-label">本命英雄</label>
-                <div class="hero-editor">
-                  <MainHeroSelector
-                    v-model="editForm.mainHeroes"
-                    :heroes="heroOptions"
-                    :loading="isHeroLoading"
-                    :limit="HERO_LIMIT"
-                    @limit-exceeded="handleHeroLimit"
-                    @search-change="handleHeroSearchChange"
-                  />
-                  <p class="field-tip">可搜索并勾选本命英雄，至少选择 1 位，最多 5 位。</p>
-                </div>
               </div>
+            </section>
+          </main>
 
-              <p v-if="message" class="feedback" :class="`feedback--${messageType}`">{{ message }}</p>
-
-              <div class="action-row edit-action-row">
-                <button class="action-btn action-btn--primary" type="button" :disabled="isSaving" @click="saveProfile">
-                  {{ isSaving ? '保存中...' : '保存修改' }}
-                </button>
-                <button class="action-btn" type="button" :disabled="isSaving" @click="cancelEdit">取消</button>
+          <!-- 抽屉底部操作栏 (固底防遮挡) -->
+          <footer class="drawer-footer">
+            <Transition name="fade">
+              <div v-if="toastMessage" class="toast-feedback" :class="`toast--${toastType}`">
+                {{ toastMessage }}
               </div>
-            </template>
+            </Transition>
 
-            <p v-if="message && !isEditMode" class="feedback" :class="`feedback--${messageType}`">{{ message }}</p>
-          </div>
-
-          <span class="neon-border neon-border--cyan" aria-hidden="true" />
-          <span class="neon-border neon-border--blue" aria-hidden="true" />
-        </section>
+            <div class="action-buttons">
+              <button
+                type="button"
+                class="btn-save touch-target"
+                :disabled="isSaving"
+                @click="handleSave"
+              >
+                <span v-if="isSaving" class="btn-spinner" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" class="spinner-icon">
+                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 31.4" />
+                  </svg>
+                </span>
+                <span>{{ isSaving ? '正在同步画像...' : '💾 保存偏好配置' }}</span>
+              </button>
+              <button type="button" class="btn-cancel touch-target" @click="handleClose">
+                取消
+              </button>
+            </div>
+          </footer>
+        </aside>
       </div>
     </Transition>
   </Teleport>
 </template>
 
 <style scoped>
-.profile-overlay {
+/* ========== 抽屉遮罩与基础容器 ========== */
+.drawer-backdrop {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(3, 7, 18, 0.68);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: rgba(1, 6, 14, 0.55);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  justify-content: flex-end;
   z-index: 1200;
 }
 
-.profile-panel {
+.drawer-panel {
   position: relative;
-  width: min(720px, calc(100vw - 32px));
-  max-height: calc(100vh - 40px);
+  width: min(480px, 100vw);
+  height: 100%;
+  background: var(--surface-card, #0F172A);
+  border-left: 1px solid var(--border-default, rgba(148, 163, 184, 0.24));
+  box-shadow: -12px 0 36px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  border-radius: 24px;
-  background: linear-gradient(160deg, rgba(11, 16, 28, 0.82), rgba(8, 12, 22, 0.92));
-  border: 1px solid rgba(96, 149, 217, 0.24);
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.52),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
 
-.panel-header {
+/* ========== 抽屉头部 ========== */
+.drawer-header {
   flex-shrink: 0;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.12));
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid rgba(127, 175, 226, 0.15);
+  align-items: flex-start;
+  background: rgba(15, 23, 42, 0.95);
 }
 
-.title-box .label {
-  margin: 0;
+.header-badge {
+  display: inline-block;
   font-size: 11px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.14em;
+  color: var(--color-primary, #06B6D4);
+  font-weight: 700;
   text-transform: uppercase;
-  color: rgba(120, 226, 255, 0.82);
+  margin-bottom: 4px;
 }
 
-.title-box h3 {
+.header-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary, #F8FAFC);
+}
+
+.header-desc {
   margin: 6px 0 0;
-  font-size: 22px;
-  color: #eef6ff;
+  font-size: 13px;
+  color: var(--text-secondary, #94A3B8);
+  line-height: 1.4;
 }
 
-.icon-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.03);
-  color: #c9d9ee;
-  font-size: 22px;
+.close-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-sm, 8px);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 24px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all var(--transition-fast, 0.15s ease);
 }
 
-.icon-btn:hover {
-  border-color: rgba(0, 229, 255, 0.45);
-  box-shadow: 0 0 18px rgba(0, 229, 255, 0.2);
+.close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger, #EF4444);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
-.profile-main {
+/* ========== 抽屉主体 ========== */
+.drawer-body {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 229, 255, 0.45) rgba(8, 17, 32, 0.35);
-}
-
-.profile-main::-webkit-scrollbar {
-  width: 8px;
-}
-
-.profile-main::-webkit-scrollbar-track {
-  background: rgba(8, 17, 32, 0.35);
-}
-
-.profile-main::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(0, 229, 255, 0.36);
-}
-
-.profile-panel--edit .profile-main {
-  padding-top: 16px;
-}
-
-.profile-panel--edit .avatar-wrap {
-  margin-bottom: 12px;
-}
-
-.profile-panel--edit .avatar {
-  width: 64px;
-  height: 64px;
-}
-
-.avatar-wrap {
+  padding: 20px 24px;
   display: flex;
-  justify-content: center;
-  margin-bottom: 18px;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.avatar {
-  width: 82px;
-  height: 82px;
+/* 用户画像卡片 */
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--border-radius-md, 12px);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+}
+
+.user-avatar {
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  border: 2px solid rgba(0, 229, 255, 0.6);
-  box-shadow:
-    0 0 22px rgba(0, 229, 255, 0.28),
-    0 0 36px rgba(0, 119, 255, 0.22);
+  border: 2px solid var(--color-primary);
+  flex-shrink: 0;
 }
 
-.info-grid,
-.form-grid {
-  display: grid;
-  gap: 12px;
+.user-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.profile-panel--edit .form-grid {
+.user-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-success, #10B981);
+  background: rgba(16, 185, 129, 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+.user-city-row {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* 配置模块通用 */
+.pref-section {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.info-item {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(123, 160, 201, 0.18);
-  background: rgba(12, 20, 35, 0.56);
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.item-label {
-  display: block;
+.section-icon {
+  font-size: 18px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.active-badge,
+.active-count,
+.budget-badge {
+  margin-left: auto;
   font-size: 12px;
-  color: rgba(157, 184, 212, 0.78);
-  margin-bottom: 6px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--color-primary-muted, rgba(6, 182, 212, 0.15));
+  color: var(--color-primary, #06B6D4);
+  border: 1px solid var(--border-default);
 }
 
-.item-value {
-  color: #ecf6ff;
+.section-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* 辣度选项网格 */
+.spicy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.spicy-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  min-height: 52px;
+  border-radius: var(--border-radius-sm, 8px);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+}
+
+.spicy-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-hover);
+}
+
+.spicy-card.is-active {
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 12px var(--color-primary-glow);
+}
+
+.spicy-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.spicy-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spicy-label {
   font-size: 14px;
-  word-break: break-all;
+  font-weight: 700;
 }
 
-.item-sign {
-  white-space: pre-wrap;
+.spicy-desc {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-.hero-badges {
+.check-mark {
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* 忌口标签芯片 */
+.restrictions-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.hero-badge {
+.diet-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 12px;
+  gap: 6px;
+  padding: 8px 14px;
+  min-height: 44px;
   border-radius: 999px;
-  background: rgba(0, 229, 255, 0.12);
-  border: 1px solid rgba(0, 229, 255, 0.2);
-  color: #d9fbff;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
   font-size: 13px;
-}
-
-.field-label {
-  font-size: 13px;
-  color: rgba(174, 201, 230, 0.8);
-}
-
-.field-input {
-  width: 100%;
-  border: 1px solid rgba(121, 170, 221, 0.22);
-  border-radius: 12px;
-  background: rgba(8, 17, 32, 0.65);
-  color: #eef7ff;
-  padding: 12px 14px;
-  font-size: 14px;
-  transition: all var(--transition-fast);
-}
-
-.field-input:focus {
-  outline: none;
-  border-color: rgba(0, 229, 255, 0.6);
-  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.12);
-}
-
-.field-textarea {
-  resize: vertical;
-  min-height: 88px;
-}
-
-.city-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: center;
-}
-
-.locate-btn {
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid rgba(0, 229, 255, 0.4);
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.2), rgba(0, 119, 255, 0.2));
-  color: #e8fbff;
-  padding: 0 14px;
+  font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.locate-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.diet-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
 }
 
-.hero-editor {
-  display: grid;
-  gap: 10px;
+.diet-chip.is-selected {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: var(--color-warning, #F59E0B);
+  color: #FDE68A;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+  font-weight: 600;
 }
 
-.field-tip {
+.chip-check {
+  font-size: 13px;
+  color: var(--color-warning);
+}
+
+/* 预算滑块容器 */
+.slider-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px 14px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.slider-current {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.budget-range {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+/* 档位说明卡片 */
+.tier-card {
+  padding: 10px 14px;
+  border-radius: var(--border-radius-sm);
+  border-left: 3px solid;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.tier-card.tier-green {
+  border-color: var(--color-success);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.tier-card.tier-cyan {
+  border-color: var(--color-primary);
+  background: rgba(6, 182, 212, 0.06);
+}
+
+.tier-card.tier-gold {
+  border-color: var(--color-accent-gold);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.tier-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tier-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tier-price {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tier-desc {
   margin: 0;
   font-size: 12px;
-  color: rgba(172, 199, 225, 0.76);
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
-.action-row {
+/* 预算预设点 */
+.presets-row {
   display: flex;
-  gap: 10px;
-  margin-top: 16px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.edit-action-row {
-  position: sticky;
-  bottom: -20px;
-  z-index: 2;
-  margin: 14px -20px -20px;
-  padding: 12px 20px 16px;
-  background:
-    linear-gradient(180deg, rgba(8, 12, 22, 0), rgba(8, 12, 22, 0.94) 24%),
-    rgba(8, 12, 22, 0.94);
-  border-top: 1px solid rgba(127, 175, 226, 0.14);
-  backdrop-filter: blur(12px);
+.presets-label {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-.action-btn {
-  flex: 1;
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid rgba(114, 164, 219, 0.22);
-  background: rgba(21, 30, 48, 0.48);
-  color: #e2efff;
+.presets-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preset-chip {
+  padding: 4px 10px;
+  min-height: 36px;
+  border-radius: var(--border-radius-xs);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.action-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
+.preset-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
 }
 
-.action-btn:disabled {
-  opacity: 0.6;
+.preset-chip.is-active {
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* ========== 抽屉底部操作栏 ========== */
+.drawer-footer {
+  flex-shrink: 0;
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.95);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toast-feedback {
+  padding: 10px 14px;
+  border-radius: var(--border-radius-sm);
+  font-size: 13px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.toast--success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.toast--error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #F87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-save {
+  flex: 2;
+  min-height: 48px;
+  border-radius: var(--border-radius-sm);
+  border: none;
+  background: linear-gradient(135deg, var(--color-primary, #06B6D4), #0284C7);
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px var(--color-primary-glow);
+}
+
+.btn-save:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+  box-shadow: 0 6px 20px var(--color-primary-glow);
+}
+
+.btn-save:disabled {
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
-.action-btn--primary {
-  border-color: rgba(0, 229, 255, 0.4);
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.2), rgba(0, 119, 255, 0.2));
+.btn-cancel {
+  flex: 1;
+  min-height: 48px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.action-btn--danger {
-  border-color: rgba(255, 51, 102, 0.35);
-  color: #ff9eb8;
+.btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
 }
 
-.feedback {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  text-align: center;
+/* ========== 过渡动画 ========== */
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: opacity 0.28s ease;
 }
 
-.feedback--success {
-  color: #bff9ff;
-  background: rgba(0, 229, 255, 0.12);
-  border: 1px solid rgba(0, 229, 255, 0.26);
+.drawer-enter-active .drawer-panel,
+.drawer-leave-active .drawer-panel {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.feedback--error {
-  color: #ffb9cd;
-  background: rgba(255, 51, 102, 0.12);
-  border: 1px solid rgba(255, 51, 102, 0.3);
-}
-
-.neon-border {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: 24px;
-}
-
-.neon-border--cyan {
-  border: 1px solid rgba(0, 229, 255, 0.28);
-  box-shadow: 0 0 28px rgba(0, 229, 255, 0.2);
-  animation: neon-breath-cyan 2.8s ease-in-out infinite;
-}
-
-.neon-border--blue {
-  border: 1px solid rgba(0, 119, 255, 0.26);
-  box-shadow: 0 0 32px rgba(0, 119, 255, 0.22);
-  animation: neon-breath-blue 3.2s ease-in-out infinite;
-}
-
-.profile-fade-enter-active,
-.profile-fade-leave-active {
-  transition: opacity 0.24s ease;
-}
-
-.profile-fade-enter-from,
-.profile-fade-leave-to {
+.drawer-enter-from,
+.drawer-leave-to {
   opacity: 0;
 }
 
-@keyframes neon-breath-cyan {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 0.9;
-  }
+.drawer-enter-from .drawer-panel,
+.drawer-leave-to .drawer-panel {
+  transform: translateX(100%);
 }
 
-@keyframes neon-breath-blue {
-  0%,
-  100% {
-    opacity: 0.28;
-  }
-  50% {
-    opacity: 0.78;
-  }
-}
-
-/* ========== 响应式适配 ========== */
+/* ========== 移动端响应式 (<= 768px: 底部抽屉模式) ========== */
 @media (max-width: 768px) {
-  .profile-overlay {
-    padding: 16px;
-  }
-
-  .profile-panel {
-    width: 100%;
-    max-width: 480px;
-    max-height: calc(100vh - 32px);
-    border-radius: 20px;
-  }
-
-  .panel-header {
-    padding: 16px 18px 14px;
-  }
-
-  .profile-main {
-    padding: 18px;
-  }
-
-  .edit-action-row {
-    bottom: -18px;
-    margin: 14px -18px -18px;
-    padding: 12px 18px 16px;
-  }
-}
-
-@media (max-width: 560px) {
-  .profile-overlay {
-    padding: 0;
+  .drawer-backdrop {
     align-items: flex-end;
   }
 
-  .profile-panel {
-    width: 100%;
-    max-width: none;
-    max-height: 90vh;
+  .drawer-panel {
+    width: 100vw;
+    height: 88vh;
     border-radius: 20px 20px 0 0;
+    border-left: none;
+    border-top: 1px solid var(--border-default);
   }
 
-  .panel-header {
-    padding: 14px 16px 12px;
+  .drawer-enter-from .drawer-panel,
+  .drawer-leave-to .drawer-panel {
+    transform: translateY(100%);
   }
 
-  .profile-main {
-    padding: 16px;
+  .drawer-header {
+    padding: 20px 20px 14px;
   }
 
-  .edit-action-row {
-    bottom: -16px;
-    margin: 12px -16px -16px;
-    padding: 12px 16px calc(14px + var(--safe-area-bottom));
+  .drawer-body {
+    padding: 16px 20px;
+    gap: 20px;
   }
 
-  .city-row {
+  .drawer-footer {
+    padding: 14px 20px calc(20px + var(--safe-area-bottom));
+  }
+
+  .spicy-grid {
     grid-template-columns: 1fr;
-  }
-
-  .action-row {
-    flex-direction: column;
-  }
-
-  .action-btn {
-    min-height: 48px;
   }
 }
 </style>

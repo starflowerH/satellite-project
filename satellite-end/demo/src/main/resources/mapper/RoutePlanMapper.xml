@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.mapper.RoutePlanMapper">
+
+    <resultMap id="RoutePlanResultMap" type="com.example.demo.pojo.RoutePlan">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="title" property="title"/>
+        <result column="duration_hours" property="durationHours"/>
+        <result column="atmosphere" property="atmosphere"/>
+        <result column="transport_mode" property="transportMode"/>
+        <result column="total_distance_meters" property="totalDistanceMeters"/>
+        <result column="total_duration_minutes" property="totalDurationMinutes"/>
+        <result column="is_fallback" property="isFallback"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO t_route_plan (
+            user_id, title, duration_hours, atmosphere,
+            transport_mode, total_distance_meters, total_duration_minutes,
+            is_fallback, created_at
+        ) VALUES (
+            #{userId}, #{title}, #{durationHours}, #{atmosphere},
+            #{transportMode}, #{totalDistanceMeters}, #{totalDurationMinutes},
+            #{isFallback}, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <select id="findById" resultMap="RoutePlanResultMap">
+        SELECT * FROM t_route_plan WHERE id = #{id}
+    </select>
+
+    <select id="listByUserId" resultMap="RoutePlanResultMap">
+        SELECT * FROM t_route_plan
+        WHERE user_id = #{userId}
+        ORDER BY id DESC
+    </select>
+
+    <select id="findLatest" resultMap="RoutePlanResultMap">
+        SELECT * FROM t_route_plan
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+</mapper>

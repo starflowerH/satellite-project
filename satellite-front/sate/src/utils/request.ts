@@ -51,9 +51,11 @@ request.interceptors.response.use(
       
       switch (status) {
         case 401:
-          // 未授权，跳转到登录页
-          console.error('未授权，请重新登录')
-          window.location.href = '/login'
+          // 未授权或登录失效，清理凭证并派发通知，避免跳转不存在的 /login 导致死链
+          console.warn('认证已失效，请重新登录')
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('session_authenticated')
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'))
           break
         case 403:
           console.error('禁止访问')
@@ -80,34 +82,3 @@ request.interceptors.response.use(
 )
 
 export default request
-
-// 示例 API 函数
-export const api = {
-  // 用户相关
-  user: {
-    login: (data: { phone: string; password: string }) => 
-      request.post('/user/login', data),
-    logout: () => 
-      request.post('/user/logout'),
-    getProfile: () => 
-      request.get('/user/profile'),
-  },
-  
-  // 对局相关
-  match: {
-    getList: (params?: { page: string; size: string }) => 
-      request.get('/matches', { params }),
-    getDetail: (id: string) => 
-      request.get(`/matches/${id}`),
-    analyze: (data: any) => 
-      request.post('/matches/analyze', data),
-  },
-  
-  // 英雄相关
-  hero: {
-    getList: () => 
-      request.get('/heroes'),
-    recommend: (data: any) => 
-      request.post('/heroes/recommend', data),
-  },
-}
