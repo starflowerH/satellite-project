@@ -24,7 +24,7 @@ request.interceptors.request.use(
   (config) => {
     // 在发送请求之前做些什么
     // 例如：添加认证 token
-    const token = localStorage.getItem('access_token')
+    const token = localStorage.getItem('sate_access_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -53,8 +53,8 @@ request.interceptors.response.use(
         case 401:
           // 未授权或登录失效，清理凭证并派发通知，避免跳转不存在的 /login 导致死链
           console.warn('认证已失效，请重新登录')
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('session_authenticated')
+          localStorage.removeItem('sate_access_token')
+          localStorage.removeItem('sate_session_authenticated')
           window.dispatchEvent(new CustomEvent('auth:unauthorized'))
           break
         case 403:

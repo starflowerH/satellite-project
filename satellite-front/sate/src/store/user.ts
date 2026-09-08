@@ -12,10 +12,10 @@ import type { UpdateUserDTO, UserInfoVO } from '@/api/user'
 import type { UserProfileVO } from '@/types/travel'
 import { toSafeString as safeStr } from '@/utils/common'
 
-const TOKEN_KEY = 'access_token'
-const USER_ID_KEY = 'user_id'
-const SESSION_AUTH_KEY = 'session_authenticated'
-const CITY_KEY = 'user_city'
+const TOKEN_KEY = 'sate_access_token'
+const USER_ID_KEY = 'sate_user_id'
+const SESSION_AUTH_KEY = 'sate_session_authenticated'
+const CITY_KEY = 'sate_user_city'
 const TRAVEL_PROFILE_KEY = 'sate_user_travel_profile'
 
 const createAvatar = (seed: string): string => {

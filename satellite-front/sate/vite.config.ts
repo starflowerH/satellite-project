@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   const apiBaseUrl = env.VITE_API_BASE_URL || 'http://127.0.0.1:8080'
-  const port = parseInt(env.VITE_PORT || '5173')
+  const port = parseInt(env.VITE_PORT || '5188')
   const proxyEnabled = env.VITE_PROXY_ENABLED !== 'false'
 
   return {
