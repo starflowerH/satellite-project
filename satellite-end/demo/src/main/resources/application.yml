@@ -10,8 +10,8 @@ spring:
       password: ${REDIS_PASSWORD}
   datasource:
     driver-class-name: org.mariadb.jdbc.Driver
-    url: ${DB_URL:jdbc:mariadb://localhost:3306/dormitory_autonomy_db?useUnicode=true&characterEncoding=utf8&useSSL=false&createDatabaseIfNotExist=true&serverTimezone=Asia/Shanghai}
-    username: ${DB_USERNAME:app_user}
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/lingjing_guide_db?useUnicode=true&characterEncoding=utf8&useSSL=false&createDatabaseIfNotExist=true&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:xiaoyuyu}
     password: ${DB_PASSWORD}
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
