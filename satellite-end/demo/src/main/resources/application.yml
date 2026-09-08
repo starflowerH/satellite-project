@@ -38,8 +38,8 @@ app:
     from-name: ${MAIL_FROM_NAME:文旅导览智能体}
   # 高德地图Key（后端代理用）
   amap:
-    key: ${AMAP_KEY}
-    route-key: ${AMAP_ROUTE_KEY}
+    key: ${AMAP_KEY:c260220fcc8a09359fa5ddd54f575cf1}
+    route-key: ${AMAP_ROUTE_KEY:c260220fcc8a09359fa5ddd54f575cf1}
   # JWT配置
   jwt:
     secret: ${JWT_SECRET:myDefaultSecretKeyForJwtTokenGeneration2024!}

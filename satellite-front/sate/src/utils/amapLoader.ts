@@ -48,10 +48,14 @@ export const loadAmap = async (options: LoadAmapOptions = {}): Promise<any> => {
     return window.AMap
   }
 
-  // 优先使用传入的key，否则从后端获取
+  // 优先使用传入的key，否则从后端获取或使用环境变量/预设配置
   let key = options.key?.trim()
   if (!key) {
-    key = await fetchAmapKey()
+    try {
+      key = await fetchAmapKey()
+    } catch {
+      key = ((import.meta as any).env?.VITE_AMAP_KEY as string) || 'c260220fcc8a09359fa5ddd54f575cf1'
+    }
   }
 
   if (!key) {

@@ -85,7 +85,8 @@ const initAMap = async () => {
 
   try {
     const serverKey = await fetchAmapKey()
-    const finalKey = serverKey || '3c3cb267c8223677353f0907e59b2075' // 内置预设高德Key
+    const envKey = (import.meta as any).env?.VITE_AMAP_KEY
+    const finalKey = serverKey || envKey || 'c260220fcc8a09359fa5ddd54f575cf1'
 
     const AMap = await AMapLoader.load({
       key: finalKey,
